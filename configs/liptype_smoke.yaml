@@ -1,0 +1,23 @@
+dataset:
+  tfrecords_train: "rebuild_data/tfrecords_smoke/train-*.tfrecord"
+  tfrecords_val: "rebuild_data/tfrecords_smoke/val-*.tfrecord"
+  max_frames: 75
+  img_h: 50
+  img_w: 100
+  img_c: 3
+  max_text_len: 32
+
+train:
+  batch_size: 2
+  epochs: 1
+  learning_rate: 1.0e-4
+  shuffle_buffer: 64
+  seed: 55
+
+augment:
+  horizontal_flip_prob: 0.5
+  temporal_jitter_prob: 0.05
+
+decode:
+  beam_width: 20
+

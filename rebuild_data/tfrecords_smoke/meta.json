@@ -1,0 +1,55 @@
+{
+  "train_examples": 6,
+  "val_examples": 0,
+  "num_shards": 2,
+  "spec": {
+    "max_frames": 75,
+    "height": 50,
+    "width": 100,
+    "channels": 3,
+    "max_text_len": 32
+  },
+  "roi_cfg": {
+    "width": 100,
+    "height": 50,
+    "pad_ratio_x": 0.2,
+    "pad_ratio_y": 0.3
+  },
+  "train_speakers": [
+    "s10",
+    "s11",
+    "s12",
+    "s13",
+    "s14",
+    "s15",
+    "s16",
+    "s17",
+    "s18",
+    "s19",
+    "s2",
+    "s20",
+    "s22",
+    "s23",
+    "s24",
+    "s25",
+    "s26",
+    "s27",
+    "s28",
+    "s29",
+    "s3",
+    "s30",
+    "s31",
+    "s32",
+    "s33",
+    "s34",
+    "s4",
+    "s5",
+    "s6",
+    "s7",
+    "s8",
+    "s9"
+  ],
+  "val_speakers": [
+    "s1"
+  ]
+}

@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "liptype-rebuild"
+version = "0.0.1"
+description = "TF2/Keras rebuild of LipType (preprocess, recognizer, repair model)."
+readme = "REBUILD.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "LipType rebuild contributors" },
+]
+dependencies = [
+  "tensorflow>=2.15",
+  "numpy>=1.24",
+  "opencv-python>=4.8",
+  "mediapipe>=0.10",
+  "pyyaml>=6.0",
+  "tqdm>=4.66",
+  "typer>=0.12",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6",
+]
+
+dlib = [
+  "dlib>=19.24",
+]
+
+[project.scripts]
+liptype2 = "liptype_rebuild.cli.entrypoint:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+

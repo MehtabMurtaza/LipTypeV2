@@ -1,0 +1,12 @@
+data:
+  low_dir: "PATH/TO/low"
+  normal_dir: "PATH/TO/normal"
+
+train:
+  batch_size: 16
+  epochs: 1
+  learning_rate: 1.0e-3
+
+model:
+  alpha: 0.816
+

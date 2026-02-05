@@ -1,13 +1,13 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
-setup(name='lipnet',
+setup(name='LipType',
     version='0.1.6',
     description='End-to-end sentence-level lipreading',
     url='http://github.com/rizkiarm/LipNet',
     author='Muhammad Rizki A.R.M',
     author_email='rizki@rizkiarm.com',
     license='MIT',
-    packages=['lipnet'],
+    packages=find_packages(),
     zip_safe=False,
 	install_requires=[
         'Keras==2.0.2',

@@ -38,7 +38,7 @@ def lowlight_train(lowlight_enhance):
     train_low_data = []
     train_high_data = []
 
-    train_low_data_names = glob('.low/*.png')#./data/train/low/*.png') 
+    train_low_data_names = glob('./low/*.png')#./data/train/low/*.png') 
     train_low_data_names.sort()
     train_high_data_names = glob('./normal/*.png')#./data/train/normal/*.png') 
     train_high_data_names.sort()

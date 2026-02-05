@@ -1,0 +1,110 @@
+# -------------------------------------------------------------------
+# LipType (TF2 rebuild) - Git ignore rules
+# Keeps source/config/docs; ignores envs, caches, data, and run artifacts.
+# -------------------------------------------------------------------
+
+# --- OS / filesystem ------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# --- Editor / IDE ---------------------------------------------------
+.cursor/
+.cursorignore
+.vscode/
+.idea/
+
+# --- Python bytecode / caches --------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pytype/
+.coverage
+coverage.xml
+htmlcov/
+.hypothesis/
+
+# --- Virtual environments ------------------------------------------
+.venv/
+.venv*/
+venv/
+ENV/
+env/
+
+# --- Python packaging / builds -------------------------------------
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# --- Jupyter / IPython ---------------------------------------------
+.ipynb_checkpoints/
+.ipython/
+
+# --- Matplotlib cache ----------------------------------------------
+.matplotlib/
+.mplcache/
+
+# --- Dependencies / vendor -----------------------------------------
+.deps/
+
+# --- Logs / temporary files ----------------------------------------
+*.log
+*.tmp
+*.swp
+*.swo
+
+# --- ML / training artifacts ---------------------------------------
+# TensorBoard + training runs (weights, event files, etc.)
+runs/
+**/tb/
+**/events.out.tfevents.*
+
+# Model checkpoints / weights
+*.ckpt
+*.ckpt.*
+*.h5
+*.keras
+*.pb
+*.tflite
+*.onnx
+
+# --- Dataset outputs / large files ---------------------------------
+# Raw GRID-like videos and alignments live under data/ in this repo.
+data/
+
+# Large third-party assets (prefer download step or Git LFS)
+assets/dlib/
+
+# TFRecord shards produced by preprocessing live here.
+# Ignore everything under rebuild_data/ *except* small metadata files.
+rebuild_data/**
+!rebuild_data/**/
+!rebuild_data/**/meta.json
+
+# Legacy preprocessing artifacts (kept locally; don’t commit)
+preprcoessing/__pycache__/
+preprcoessing/checkpoint/
+preprcoessing/results/
+preprcoessing/data/
+preprcoessing/low/
+preprcoessing/normal/
+
+# Common media formats (usually raw inputs / outputs)
+*.mpg
+*.mpeg
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.wav
+*.flac
+
+# --- Repo-local scratch --------------------------------------------
+LipType_full_code.txt
+

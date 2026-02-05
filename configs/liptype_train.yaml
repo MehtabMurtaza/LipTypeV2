@@ -1,0 +1,23 @@
+dataset:
+  tfrecords_train: "rebuild_data/tfrecords_small1/train-*.tfrecord"
+  tfrecords_val: "rebuild_data/tfrecords_small1/val-*.tfrecord"
+  max_frames: 75
+  img_h: 50
+  img_w: 100
+  img_c: 3
+  max_text_len: 32
+
+train:
+  batch_size: 16
+  epochs: 30
+  learning_rate: 1.0e-4
+  shuffle_buffer: 4096
+  seed: 55
+
+augment:
+  horizontal_flip_prob: 0.5
+  temporal_jitter_prob: 0.05
+
+decode:
+  beam_width: 50
+

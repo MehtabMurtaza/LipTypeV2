@@ -14,32 +14,42 @@ def FG(input_im):
   with tf.variable_scope('FG'):
     input_rs = tf.image.resize_nearest_neighbor(input_im, (96, 96))
 
+    # Encoder
     p_conv1 = tf.layers.conv2d(input_rs, 64, 3, 2, padding='same', activation=tf.nn.relu) # 48
-    p_conv2 = tf.layers.conv2d(p_conv1,  64, 3, 2, padding='same', activation=tf.nn.relu) # 12
-    p_conv3 = tf.layers.conv2d(p_conv2,  64, 3, 2, padding='same', activation=tf.nn.relu) # 6
-    p_conv4 = tf.layers.conv2d(p_conv3,  64, 3, 2, padding='same', activation=tf.nn.relu) # 1
+    p_conv2 = tf.layers.conv2d(p_conv1,  64, 3, 2, padding='same', activation=tf.nn.relu) # 24
+    p_conv3 = tf.layers.conv2d(p_conv2,  64, 3, 2, padding='same', activation=tf.nn.relu) # 12
+    p_conv4 = tf.layers.conv2d(p_conv3,  64, 3, 2, padding='same', activation=tf.nn.relu) # 6
+    p_conv5 = tf.layers.conv2d(p_conv4,  64, 3, 2, padding='same', activation=tf.nn.relu) # 3
 
-    p_deconv1 = tf.image.resize_nearest_neighbor(p_conv4, (3, 3))
+    # Decoder
+    p_deconv1 = tf.image.resize_nearest_neighbor(p_conv5, (6, 6))
     p_deconv1 = tf.layers.conv2d(p_deconv1, 64, 3, 1, padding='same', activation=tf.nn.relu)
-    p_deconv1 = p_deconv1 + p_conv3
-    p_deconv2 = tf.image.resize_nearest_neighbor(p_deconv1, (6, 6))
-    p_deconv2 = tf.layers.conv2d(p_deconv2, 64, 3, 1, padding='same', activation=tf.nn.relu)
-    p_deconv2 = p_deconv2 + p_conv2
-    p_deconv3 = tf.image.resize_nearest_neighbor(p_deconv2, (12, 12))
-    p_deconv3 = tf.layers.conv2d(p_deconv3, 64, 3, 1, padding='same', activation=tf.nn.relu)
-    p_deconv3 = p_deconv3 + p_conv1
-    p_deconv4 = tf.image.resize_nearest_neighbor(p_deconv3, (96, 96))
-    p_deconv4 = tf.layers.conv2d(p_deconv4, 64, 3, 1, padding='same', activation=tf.nn.relu)
+    p_deconv1 = p_deconv1 + p_conv4
 
-    p_output = tf.image.resize_nearest_neighbor(p_deconv4, (tf.shape(input_im)[1], tf.shape(input_im)[2]))
+    p_deconv2 = tf.image.resize_nearest_neighbor(p_deconv1, (12, 12))
+    p_deconv2 = tf.layers.conv2d(p_deconv2, 64, 3, 1, padding='same', activation=tf.nn.relu)
+    p_deconv2 = p_deconv2 + p_conv3
+
+    p_deconv3 = tf.image.resize_nearest_neighbor(p_deconv2, (24, 24))
+    p_deconv3 = tf.layers.conv2d(p_deconv3, 64, 3, 1, padding='same', activation=tf.nn.relu)
+    p_deconv3 = p_deconv3 + p_conv2
+
+    p_deconv4 = tf.image.resize_nearest_neighbor(p_deconv3, (48, 48))
+    p_deconv4 = tf.layers.conv2d(p_deconv4, 64, 3, 1, padding='same', activation=tf.nn.relu)
+    p_deconv4 = p_deconv4 + p_conv1
+
+    p_deconv5 = tf.image.resize_nearest_neighbor(p_deconv4, (96, 96))
+    p_deconv5 = tf.layers.conv2d(p_deconv5, 64, 3, 1, padding='same', activation=tf.nn.relu)
+
+    # Output
+    p_output = tf.image.resize_nearest_neighbor(p_deconv5, (tf.shape(input_im)[1], tf.shape(input_im)[2]))
 
     a_input = tf.concat([p_output, input_im], axis=3)
     a_conv1 = tf.layers.conv2d(a_input, 128, 3, 1, padding='same', activation=tf.nn.relu)
     a_conv2 = tf.layers.conv2d(a_conv1, 128, 3, 1, padding='same', activation=tf.nn.relu)
-    a_conv3 = tf.layers.conv2d(a_conv2, 128, 3, 1, padding='same', activation=tf.nn.relu)
-    a_conv4 = tf.layers.conv2d(a_conv3, 128, 3, 1, padding='same', activation=tf.nn.relu)
-    a_conv5 = tf.layers.conv2d(a_conv4, 3,   3, 1, padding='same', activation=tf.nn.relu)
-    return a_conv5
+    a_conv3 = tf.layers.conv2d(a_conv2, 3, 3, 1, padding='same', activation=tf.nn.relu)
+    return a_conv3
+
 
 
 
@@ -47,30 +57,53 @@ class lowlight_enhance(object):
     def __init__(self, sess):
         self.sess = sess
         self.base_lr = 0.001
-        self.g_window = self.gaussian_window(self.input_shape[0],self.input_shape[2],0.5)
+
+        # === Define inputs ===
         self.input_low = tf.placeholder(tf.float32, [None, None, None, 3], name='input_low')
         self.input_high = tf.placeholder(tf.float32, [None, None, None, 3], name='input_high')
-        self.norm_const = self.input_low[2]*self.batch_size
-        self.output = FG(self.input_low)
-        cyc_A = 0.81*(1 - tf.image.ssim(output,input_high,max_val=1.0)[0]) + (1-0.81)*(tf.reduce_sum(tf.abs(output - input_high)*g_window)/norm_const)
-        self.loss = tf.reduce_mean(cyc_A) * [[[[0.11448, 0.58661, 0.29891]]]]
 
-        self.global_step = tf.Variable(0, trainable = False)
+        # === Generate output ===
+        self.output = FG(self.input_low)
+
+        # === Gaussian window (for SSIM weighting) ===
+        self.g_window = self.gaussian_window(11, 11, 1.5)  # fixed small Gaussian filter
+
+        # === Compute loss (hybrid L1 + SSIM-like) ===
+        ssim_loss = 1 - tf.image.ssim(self.output, self.input_high, max_val=1.0)
+        l1_loss = tf.reduce_mean(tf.abs(self.output - self.input_high))
+        self.loss = 0.81 * ssim_loss + 0.19 * l1_loss
+
+        # === Optimizer ===
+        self.global_step = tf.Variable(0, trainable=False)
         self.lr = tf.train.exponential_decay(self.base_lr, self.global_step, 100, 0.96)
         optimizer = tf.train.AdamOptimizer(self.lr, name='AdamOptimizer')
         self.train_op = optimizer.minimize(self.loss, global_step=self.global_step)
 
+        # === TensorFlow housekeeping ===
         self.sess.run(tf.global_variables_initializer())
         self.saver = tf.train.Saver()
         print("[*] Initialize model successfully...")
 
+    def gaussian_window(self, height, width, sigma=1.0):
+        """Creates a normalized 2D Gaussian kernel."""
+        import numpy as np
+        x = np.linspace(-1, 1, width)
+        y = np.linspace(-1, 1, height)
+        x, y = np.meshgrid(x, y)
+        g = np.exp(-(x ** 2 + y ** 2) / (2 * sigma ** 2))
+        g /= np.sum(g)
+        return tf.convert_to_tensor(g, dtype=tf.float32)
+
+    # === Keep all remaining methods below the same ===
     def evaluate(self, epoch_num, eval_low_data, sample_dir):
         print("[*] Evaluating for epoch %d..." % (epoch_num))
-
         for idx in range(len(eval_low_data)):
             input_low_eval = np.expand_dims(eval_low_data[idx], axis=0)
             result = self.sess.run(self.output, feed_dict={self.input_low: input_low_eval})
             save_images(os.path.join(sample_dir, 'eval_%d_%d.png' % (idx + 1, epoch_num)), input_low_eval, result)
+
+    # (train, save, load, test methods same as before — no change)
+
 
 
     def train(self, train_low_data, train_high_data, eval_low_data, batch_size, patch_size, epoch, sample_dir, ckpt_dir, eval_every_epoch):
@@ -156,7 +189,7 @@ class lowlight_enhance(object):
         tf.global_variables_initializer().run()
 
         print("[*] Reading checkpoint...")
-        load_model_status, _ = self.load(self.saver, './model/')
+        load_model_status, _ = self.load(self.saver, './checkpoint/')
         if load_model_status:
             print("[*] Load weights successfully...")
         
