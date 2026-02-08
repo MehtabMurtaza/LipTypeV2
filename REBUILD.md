@@ -25,6 +25,36 @@ python -m pip install -e .
 liptype2 --help
 ```
 
+### Environments (recommended setup)
+
+This repo can be run with **two conda envs**:
+
+- **Training env**: `LipType/.venv311`
+  - Used for: training (`train liptype`), evaluation (`eval liptype`), running scripts in `scripts/`.
+- **Preprocess env (dlib)**: `LipType/.venv_dlib`
+  - Used for: TFRecord conversion with `--dlib-predictor`.
+  - Reason: `dlib` works reliably with **NumPy 1.26.x**, while some other packages in the training env may require **NumPy 2.x**.
+
+Activate:
+
+```bash
+conda activate "/Users/mehtab/Documents/Research/LipType/.venv311"
+# or
+conda activate "/Users/mehtab/Documents/Research/LipType/.venv_dlib"
+```
+
+Run from repo root:
+
+```bash
+cd "/Users/mehtab/Documents/Research/LipType"
+```
+
+Tip: If `liptype2` isn’t on your PATH, you can always use:
+
+```bash
+python -m liptype_rebuild.cli.entrypoint --help
+```
+
 ### End-to-end flow (GRID-style)
 
 1) **Convert your existing dataset to TFRecords**
@@ -36,7 +66,7 @@ Your repo already contains GRID-like data at `data/s*_processed/`:
 Create a split file (example at `configs/grid_split_example.yaml`) and run:
 
 ```bash
-liptype2 preprocess grid-to-tfrecords \
+python -m liptype_rebuild.cli.entrypoint preprocess grid-to-tfrecords \
   --input-root data \
   --output-root rebuild_data/tfrecords \
   --split-config configs/grid_split_example.yaml \
@@ -45,33 +75,93 @@ liptype2 preprocess grid-to-tfrecords \
   --dlib-predictor /path/to/shape_predictor_68_face_landmarks.dat
 ```
 
+If preprocessing is too slow (full GRID), create a smaller TFRecords set for testing:
+
+```bash
+python -m liptype_rebuild.cli.entrypoint preprocess grid-to-tfrecords \
+  --input-root data \
+  --output-root rebuild_data/tfrecords_small1 \
+  --split-config configs/grid_split_example.yaml \
+  --num-shards 8 \
+  --max-frames 75 \
+  --max-examples 200 \
+  --dlib-predictor /path/to/shape_predictor_68_face_landmarks.dat
+```
+
+Notes:
+- `--max-examples` stops after N utterances (total across all speakers).
+- For dlib landmarks, run the converter inside the **dlib preprocess env** (`.venv_dlib`).
+
 2) **Train LipType**
 
 Edit `configs/liptype_grid.yaml` to point to your TFRecord shards, then:
 
 ```bash
-liptype2 train liptype --config configs/liptype_grid.yaml --run-dir runs/liptype_run1
+python -m liptype_rebuild.cli.entrypoint train liptype \
+  --config configs/liptype_grid.yaml \
+  --run-dir runs/liptype_run1
 ```
 
 3) **Evaluate**
 
 ```bash
-liptype2 eval liptype --config configs/liptype_grid.yaml --weights runs/liptype_run1/weights.001.weights.h5
+python -m liptype_rebuild.cli.entrypoint eval liptype \
+  --config configs/liptype_grid.yaml \
+  --weights runs/liptype_run1/weights.001.weights.h5 \
+  --num-batches 200
 ```
 
 4) **Predict from a video**
 
 ```bash
-liptype2 predict liptype --weights runs/liptype_run1/weights.001.weights.h5 --video path/to/sample.mpg
+python -m liptype_rebuild.cli.entrypoint predict liptype \
+  --weights runs/liptype_run1/weights.001.weights.h5 \
+  --video path/to/sample.mpg
+```
 
 If you want dlib-based mouth crops during prediction too:
 
 ```bash
-liptype2 predict liptype \
+python -m liptype_rebuild.cli.entrypoint predict liptype \
   --weights runs/liptype_run1/weights.001.weights.h5 \
   --video path/to/sample.mpg \
   --dlib-predictor /path/to/shape_predictor_68_face_landmarks.dat
 ```
+
+### Qualitative check: print REF/HYP/WER from random TFRecord samples
+
+After training (you have a `runs/.../weights.###.weights.h5`), you can sample random TFRecord examples and print:
+- speaker/utterance id
+- REF (ground truth from TFRecords)
+- HYP (model output)
+- WER
+
+```bash
+python scripts/random_val_decode.py \
+  --config configs/liptype_grid.yaml \
+  --weights runs/liptype_run1/weights.001.weights.h5 \
+  --split val \
+  --num-samples 10 \
+  --beam-width 50
+```
+
+If your validation split is empty (e.g. very small TFRecords), use:
+
+```bash
+python scripts/random_val_decode.py \
+  --config configs/liptype_grid.yaml \
+  --weights runs/liptype_run1/weights.001.weights.h5 \
+  --split train \
+  --num-samples 10 \
+  --beam-width 50
+```
+
+### TensorBoard
+
+Training writes logs to `runs/<run_dir>/tb/`:
+
+```bash
+tensorboard --logdir runs/liptype_run1/tb
 ```
 
 ### Optional: low-light enhancement (GLADNet-like)
@@ -79,23 +169,32 @@ liptype2 predict liptype \
 - Train from paired `low/*.png` and `normal/*.png`:
 
 ```bash
-liptype2 train gladnet --config configs/gladnet_example.yaml --run-dir runs/gladnet_run1
+python -m liptype_rebuild.cli.entrypoint train gladnet --config configs/gladnet_example.yaml --run-dir runs/gladnet_run1
 ```
 
 - Enhance a video:
 
 ```bash
-liptype2 enhance video --weights runs/gladnet_run1/weights.001.weights.h5 --input-video in.mp4 --output-video out.mp4
+python -m liptype_rebuild.cli.entrypoint enhance video \
+  --weights runs/gladnet_run1/weights.001.weights.h5 \
+  --input-video in.mp4 \
+  --output-video out.mp4
 ```
 
 ### Optional: postprocessing repair model
 
-The repair model can be applied at prediction time if you provide:\n+- a saved bidirectional trigram LM (`liptype2 train lm ...`)\n+- a dictionary word list (one word per line)\n+- optionally a corpus text for Norvig spell correction
+The repair model can be applied at prediction time if you provide:
+- a saved bidirectional trigram LM (`train lm`)
+- a dictionary word list (one word per line)
+- optionally a corpus text for Norvig spell correction
 
 ```bash
-liptype2 train lm --corpus-txt LM-corpus.txt --output-json runs/lm.json --min-count 2
+python -m liptype_rebuild.cli.entrypoint train lm \
+  --corpus-txt LM-corpus.txt \
+  --output-json runs/lm.json \
+  --min-count 2
 
-liptype2 predict liptype \
+python -m liptype_rebuild.cli.entrypoint predict liptype \
   --weights runs/liptype_run1/weights.001.weights.h5 \
   --video path/to/sample.mpg \
   --repair-lm runs/lm.json \

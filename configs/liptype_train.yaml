@@ -1,6 +1,6 @@
 dataset:
-  tfrecords_train: "rebuild_data/tfrecords_small1/train-*.tfrecord"
-  tfrecords_val: "rebuild_data/tfrecords_small1/val-*.tfrecord"
+  tfrecords_train: "rebuild_data/tfrecords_small2/train-*.tfrecord"
+  tfrecords_val: "rebuild_data/tfrecords_small2/val-*.tfrecord"
   max_frames: 75
   img_h: 50
   img_w: 100
@@ -8,7 +8,7 @@ dataset:
   max_text_len: 32
 
 train:
-  batch_size: 16
+  batch_size: 4
   epochs: 30
   learning_rate: 1.0e-4
   shuffle_buffer: 4096

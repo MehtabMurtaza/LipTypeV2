@@ -1,0 +1,48 @@
+# Random speaker split for GRID-style layout under `data/s*_processed/`.
+# Generated with seed=42 from 33 speakers found in this repo:
+# - train: 27 speakers (~81.8%)
+# - val:   3 speakers  (~9.1%)
+# - test:  3 speakers  (~9.1%)
+#
+# Note: current preprocessing code uses ONLY `train_speakers` and `val_speakers`.
+# `test_speakers` is included for convenience/future use.
+
+train_speakers:
+  - s4
+  - s15
+  - s20
+  - s26
+  - s3
+  - s22
+  - s2
+  - s25
+  - s1
+  - s24
+  - s29
+  - s31
+  - s19
+  - s6
+  - s33
+  - s16
+  - s34
+  - s10
+  - s8
+  - s23
+  - s28
+  - s12
+  - s27
+  - s30
+  - s13
+  - s7
+  - s14
+
+val_speakers:
+  - s5
+  - s9
+  - s18
+
+test_speakers:
+  - s32
+  - s11
+  - s17
+
