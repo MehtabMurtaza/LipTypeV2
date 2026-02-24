@@ -105,6 +105,8 @@ def convert_grid_to_tfrecords(
     roi_cfg: MouthRoiConfig = MouthRoiConfig(),
     spec: ExampleSpec | None = None,
     landmarks_backend: LandmarksBackend | None = None,
+    enhance_weights: Path | None = None,
+    enhance_batch_size: int = 16,
 ):
     """Convert dataset into sharded TFRecords.
 
@@ -120,6 +122,15 @@ def convert_grid_to_tfrecords(
         spec = ExampleSpec(max_frames=max_frames, height=roi_cfg.height, width=roi_cfg.width, channels=3)
     if landmarks_backend is None:
         landmarks_backend = default_landmarks_backend()
+
+    enhancer = None
+    if enhance_weights is not None:
+        import tensorflow as tf
+
+        from liptype_rebuild.enhance.gladnet import build_gladnet
+
+        enhancer = build_gladnet()
+        enhancer.load_weights(str(enhance_weights))
 
     layout = GridLayout(root=input_root)
     charset = Charset()
@@ -148,9 +159,22 @@ def convert_grid_to_tfrecords(
             label = charset.text_to_labels(sentence)
 
             video = read_video_rgb(video_path, max_frames=None)
+            frames_rgb = video.frames_rgb
+
+            if enhancer is not None:
+                # Enhance before landmark detection to improve robustness in low light.
+                frames_f = frames_rgb.astype(np.float32) / 255.0
+                outs: list[np.ndarray] = []
+                for i in range(0, frames_f.shape[0], int(enhance_batch_size)):
+                    b = frames_f[i : i + int(enhance_batch_size)]
+                    y = enhancer(b, training=False).numpy()
+                    y = np.clip(y * 255.0, 0, 255).astype(np.uint8)
+                    outs.append(y)
+                frames_rgb = np.concatenate(outs, axis=0).astype(np.uint8)
+
             # detect landmarks per frame
-            lms = [landmarks_backend.detect(frame) for frame in video.frames_rgb]
-            rois = crop_video_mouth_rois(video.frames_rgb, lms, cfg=roi_cfg)  # [T,50,100,3]
+            lms = [landmarks_backend.detect(frame) for frame in frames_rgb]
+            rois = crop_video_mouth_rois(frames_rgb, lms, cfg=roi_cfg)  # [T,50,100,3]
 
             ex = make_example(
                 frames_uint8=rois,

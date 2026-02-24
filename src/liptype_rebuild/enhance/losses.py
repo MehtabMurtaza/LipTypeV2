@@ -13,7 +13,9 @@ class MSSSIML1(tf.keras.losses.Loss):
     def call(self, y_true, y_pred):
         y_true = tf.clip_by_value(y_true, 0.0, 1.0)
         y_pred = tf.clip_by_value(y_pred, 0.0, 1.0)
-        ms_ssim = tf.image.ssim_multiscale(y_true, y_pred, max_val=1.0)
+        # Note: In TF 2.10, `filter_size` must be a Python int (not a Tensor).
+        # This loss assumes inputs have been resized to a sufficiently large size.
+        ms_ssim = tf.image.ssim_multiscale(y_true, y_pred, max_val=1.0, filter_size=11)
         l1 = tf.reduce_mean(tf.abs(y_true - y_pred), axis=[1, 2, 3])
         # loss: minimize (1 - ms_ssim) and l1
         return self.alpha * (1.0 - ms_ssim) + (1.0 - self.alpha) * l1

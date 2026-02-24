@@ -220,7 +220,7 @@ def train_gladnet(
     run_dir: Path = typer.Option(..., file_okay=False, dir_okay=True),
 ):
     """Train GLADNet-like enhancer from paired low/normal image folders."""
-    import os
+    import random
     import tensorflow as tf
 
     from liptype_rebuild.enhance.gladnet import build_gladnet
@@ -232,6 +232,16 @@ def train_gladnet(
     norm_dir = Path(cfg["data"]["normal_dir"])
     tr = cfg.get("train", {})
     alpha = float(cfg.get("model", {}).get("alpha", 0.816))
+    seed = int(tr.get("seed", 55))
+    train_count = int(cfg.get("data", {}).get("train_count", 0) or 0)
+    val_count = int(cfg.get("data", {}).get("val_count", 0) or 0)
+    image_size = cfg.get("data", {}).get("image_size", 256)
+    if isinstance(image_size, (list, tuple)):
+        if len(image_size) != 2:
+            raise typer.BadParameter("data.image_size must be an int or a 2-item list [H, W].")
+        resize_h, resize_w = int(image_size[0]), int(image_size[1])
+    else:
+        resize_h = resize_w = int(image_size)
 
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -240,20 +250,62 @@ def train_gladnet(
 
     lows = _list_pngs(low_dir)
     norms = _list_pngs(norm_dir)
-    if len(lows) != len(norms):
-        raise typer.BadParameter("low_dir and normal_dir must contain same number of *.png files.")
+
+    # Pair by filename to avoid silent mismatches.
+    low_map = {p.name: p for p in lows}
+    norm_map = {p.name: p for p in norms}
+    common = sorted(set(low_map.keys()) & set(norm_map.keys()))
+    missing_low = sorted(set(norm_map.keys()) - set(low_map.keys()))
+    missing_norm = sorted(set(low_map.keys()) - set(norm_map.keys()))
+    if missing_low or missing_norm:
+        raise typer.BadParameter(
+            "low_dir and normal_dir must contain matching *.png filenames. "
+            f"Missing in Low: {len(missing_low)}; missing in Normal: {len(missing_norm)}."
+        )
+
+    pairs = [(low_map[name], norm_map[name]) for name in common]
+    rnd = random.Random(seed)
+    rnd.shuffle(pairs)
+
+    if train_count > 0 or val_count > 0:
+        if train_count <= 0 or val_count <= 0:
+            raise typer.BadParameter("If you set train_count/val_count, both must be > 0.")
+        if train_count + val_count > len(pairs):
+            raise typer.BadParameter(
+                f"train_count+val_count={train_count+val_count} exceeds available pairs={len(pairs)}."
+            )
+        train_pairs = pairs[:train_count]
+        val_pairs = pairs[train_count : train_count + val_count]
+    else:
+        # Backward compatible default: no explicit val split.
+        train_pairs = pairs
+        val_pairs = []
 
     def _read_pair(low_path: tf.Tensor, norm_path: tf.Tensor):
         low = tf.io.decode_png(tf.io.read_file(low_path), channels=3)
         norm = tf.io.decode_png(tf.io.read_file(norm_path), channels=3)
         low = tf.image.convert_image_dtype(low, tf.float32)
         norm = tf.image.convert_image_dtype(norm, tf.float32)
+        low = tf.image.resize(low, (resize_h, resize_w), method="bilinear", antialias=True)
+        norm = tf.image.resize(norm, (resize_h, resize_w), method="bilinear", antialias=True)
+        low = tf.clip_by_value(low, 0.0, 1.0)
+        norm = tf.clip_by_value(norm, 0.0, 1.0)
+        # Important: give tensors a static shape. Without this, TF 2.10 + MS-SSIM can produce NaNs
+        # in `model.fit(...)` even when eager single-batch runs look fine.
+        low = tf.ensure_shape(low, (resize_h, resize_w, 3))
+        norm = tf.ensure_shape(norm, (resize_h, resize_w, 3))
         return low, norm
 
-    ds = tf.data.Dataset.from_tensor_slices((list(map(str, lows)), list(map(str, norms))))
-    ds = ds.shuffle(1024, reshuffle_each_iteration=True)
-    ds = ds.map(_read_pair, num_parallel_calls=tf.data.AUTOTUNE)
-    ds = ds.batch(int(tr.get("batch_size", 16))).prefetch(tf.data.AUTOTUNE)
+    def _make_ds(ps: list[tuple[Path, Path]], training: bool) -> tf.data.Dataset:
+        ds = tf.data.Dataset.from_tensor_slices((list(map(str, [a for a, _b in ps])), list(map(str, [b for _a, b in ps]))))
+        if training:
+            ds = ds.shuffle(1024, seed=seed, reshuffle_each_iteration=True)
+        ds = ds.map(_read_pair, num_parallel_calls=tf.data.AUTOTUNE)
+        ds = ds.batch(int(tr.get("batch_size", 16))).prefetch(tf.data.AUTOTUNE)
+        return ds
+
+    train_ds = _make_ds(train_pairs, training=True)
+    val_ds = _make_ds(val_pairs, training=False) if val_pairs else None
 
     model = build_gladnet()
     opt = tf.keras.optimizers.Adam(learning_rate=float(tr.get("learning_rate", 1e-3)))
@@ -263,7 +315,16 @@ def train_gladnet(
         filepath=str(run_dir / "weights.{epoch:03d}.weights.h5"),
         save_weights_only=True,
     )
-    model.fit(ds, epochs=int(tr.get("epochs", 1)), callbacks=[ckpt, tf.keras.callbacks.TensorBoard(str(run_dir / "tb"))])
+    model.fit(
+        train_ds,
+        validation_data=val_ds,
+        epochs=int(tr.get("epochs", 1)),
+        callbacks=[
+            tf.keras.callbacks.TerminateOnNaN(),
+            ckpt,
+            tf.keras.callbacks.TensorBoard(str(run_dir / "tb")),
+        ],
+    )
 
 
 @app.command("lm")

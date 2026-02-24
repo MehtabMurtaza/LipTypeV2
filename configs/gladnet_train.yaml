@@ -1,0 +1,19 @@
+data:
+  low_dir: "GladNetData/Low"
+  normal_dir: "GladNetData/Normal"
+  # Paper split: 4,000 train / 1,000 test (from 5,000 total paired images)
+  train_count: 4000
+  val_count: 1000
+  # Ensure MS-SSIM has enough resolution for multiscale pyramid.
+  image_size: 256
+
+model:
+  # Paper uses alpha ≈ 0.816 for MSSSIM-L1
+  alpha: 0.816
+
+train:
+  batch_size: 16
+  epochs: 70
+  learning_rate: 1.0e-3
+  seed: 55
+

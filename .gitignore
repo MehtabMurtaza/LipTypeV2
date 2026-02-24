@@ -78,6 +78,9 @@ runs/
 # Raw GRID-like videos and alignments live under data/ in this repo.
 data/
 
+# GLADNet paired image dataset (keep local; do not commit)
+GladNetData/
+
 # Large third-party assets (prefer download step or Git LFS)
 assets/dlib/
 

@@ -21,6 +21,13 @@ def grid_to_tfrecords(
     dlib_predictor: Path = typer.Option(
         None, exists=True, dir_okay=False, help="Path to dlib 68-landmark predictor .dat file."
     ),
+    enhance_weights: Path = typer.Option(
+        None,
+        exists=True,
+        dir_okay=False,
+        help="Optional: GLADNet enhancer weights to apply before ROI extraction.",
+    ),
+    enhance_batch_size: int = typer.Option(16, min=1, help="Batch size for enhancer inference."),
 ):
     """Convert GRID-like dataset (mpg + align) to TFRecords.
 
@@ -55,6 +62,8 @@ def grid_to_tfrecords(
         max_frames=max_frames,
         max_examples=(max_examples if max_examples > 0 else None),
         landmarks_backend=landmarks_backend,
+        enhance_weights=enhance_weights,
+        enhance_batch_size=enhance_batch_size,
     )
     typer.echo(f"Wrote TFRecords to {output_root}")
 

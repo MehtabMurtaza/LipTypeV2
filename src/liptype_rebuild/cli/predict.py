@@ -20,6 +20,13 @@ def predict_liptype(
     repair_dict: Path = typer.Option(None, exists=True, dir_okay=False, help="Dictionary word list (one per line)."),
     repair_spell_corpus: Path = typer.Option(None, exists=True, dir_okay=False, help="Optional corpus for Norvig spell."),
     dlib_predictor: Path = typer.Option(None, exists=True, dir_okay=False, help="Path to dlib 68-landmark predictor .dat file."),
+    enhance_weights: Path = typer.Option(
+        None,
+        exists=True,
+        dir_okay=False,
+        help="Optional: GLADNet enhancer weights to apply before landmark detection.",
+    ),
+    enhance_batch_size: int = typer.Option(16, min=1, help="Batch size for enhancer inference."),
 ):
     """Predict text from a video (or frames directory)."""
     import tensorflow as tf
@@ -35,9 +42,26 @@ def predict_liptype(
     infer.load_weights(str(weights))
 
     vf = read_video_rgb(video)
+    frames_rgb = vf.frames_rgb
+
+    if enhance_weights is not None:
+        from liptype_rebuild.enhance.gladnet import build_gladnet
+
+        enh = build_gladnet()
+        enh.load_weights(str(enhance_weights))
+
+        frames_f = frames_rgb.astype(np.float32) / 255.0
+        outs: list[np.ndarray] = []
+        for i in range(0, frames_f.shape[0], int(enhance_batch_size)):
+            b = frames_f[i : i + int(enhance_batch_size)]
+            y = enh(b, training=False).numpy()
+            y = np.clip(y * 255.0, 0, 255).astype(np.uint8)
+            outs.append(y)
+        frames_rgb = np.concatenate(outs, axis=0).astype(np.uint8)
+
     backend = Dlib68Backend(str(dlib_predictor)) if dlib_predictor is not None else default_landmarks_backend()
-    lms = [backend.detect(frame) for frame in vf.frames_rgb]
-    rois_u8 = crop_video_mouth_rois(vf.frames_rgb, lms, cfg=MouthRoiConfig(width=cfg.img_w, height=cfg.img_h))
+    lms = [backend.detect(frame) for frame in frames_rgb]
+    rois_u8 = crop_video_mouth_rois(frames_rgb, lms, cfg=MouthRoiConfig(width=cfg.img_w, height=cfg.img_h))
 
     # pad/truncate to cfg.frames_n
     t = rois_u8.shape[0]
