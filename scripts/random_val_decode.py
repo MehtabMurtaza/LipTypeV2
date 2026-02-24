@@ -27,7 +27,7 @@ def _parse_args() -> Args:
     p.add_argument("--weights", required=True, help="Path to Keras weights file (*.weights.h5).")
     p.add_argument(
         "--split",
-        choices=["val", "train"],
+        choices=["val", "train", "test"],
         default="val",
         help="Which TFRecords split to sample from (val is recommended).",
     )
@@ -81,7 +81,12 @@ def main() -> None:
     _train, infer = build_models(model_cfg)
     infer.load_weights(args.weights)
 
-    key = "tfrecords_val" if args.split == "val" else "tfrecords_train"
+    if args.split == "val":
+        key = "tfrecords_val"
+    elif args.split == "test":
+        key = "tfrecords_test"
+    else:
+        key = "tfrecords_train"
     tfrecord_glob = ds_cfg[key]
     files = tf.io.gfile.glob(tfrecord_glob)
     if not files:

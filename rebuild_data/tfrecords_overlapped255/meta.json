@@ -1,0 +1,30 @@
+{
+  "train_examples": 21605,
+  "val_examples": 7395,
+  "test_examples": 4000,
+  "num_shards": 64,
+  "spec": {
+    "max_frames": 75,
+    "height": 50,
+    "width": 100,
+    "channels": 3,
+    "max_text_len": 32
+  },
+  "roi_cfg": {
+    "width": 100,
+    "height": 50,
+    "pad_ratio_x": 0.2,
+    "pad_ratio_y": 0.3
+  },
+  "mode": "overlapped_utterances",
+  "val_speakers": [],
+  "test_speakers": [
+    "s1",
+    "s2",
+    "s20",
+    "s22"
+  ],
+  "exclude_speakers": [
+    "s21"
+  ]
+}

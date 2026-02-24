@@ -19,6 +19,15 @@ class SEBlock(tf.keras.layers.Layer):
         s = tf.reshape(s, [-1, 1, 1, self.channels])
         return x * s
 
+    def compute_output_shape(self, input_shape):
+        # SE is channel-wise reweighting, so shape is unchanged.
+        return input_shape
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"channels": self.channels, "reduction": self.reduction})
+        return config
+
 
 def conv_bn_relu(x, filters: int, kernel_size: int | tuple[int, int], strides=1):
     x = tf.keras.layers.Conv2D(filters, kernel_size, strides=strides, padding="same", use_bias=False)(x)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 import typer
 
@@ -11,6 +12,19 @@ app = typer.Typer(help="Train models (LipType, enhancement, postprocess).")
 def train_liptype(
     config: Path = typer.Option(..., exists=True, dir_okay=False),
     run_dir: Path = typer.Option(..., file_okay=False, dir_okay=True),
+    resume_weights: Path = typer.Option(
+        None,
+        exists=True,
+        dir_okay=False,
+        help="Optional: path to weights.###.weights.h5 to resume from (warm-start).",
+    ),
+    resume_checkpoint: Path = typer.Option(
+        None,
+        help=(
+            "Optional: resume from a TensorFlow checkpoint to restore model + optimizer state. "
+            "Pass either the checkpoint directory (runs/<run_dir>/ckpt) or a specific prefix like ckpt-000053."
+        ),
+    ),
 ):
     """Train LipType recognizer from a config file."""
     import tensorflow as tf
@@ -67,6 +81,70 @@ def train_liptype(
 
     decode_cfg = DecodeConfig(beam_width=int(dec_cfg.get("beam_width", 50)))
 
+    initial_epoch = 0
+    # Full checkpointing: model weights + optimizer state + epoch counter.
+    ckpt_dir = run_dir / "ckpt"
+    epoch_var = tf.Variable(0, trainable=False, dtype=tf.int64, name="epoch")
+    ckpt = tf.train.Checkpoint(model=training_model, optimizer=opt, epoch=epoch_var)
+    manager = tf.train.CheckpointManager(ckpt, directory=str(ckpt_dir), max_to_keep=5)
+
+    def _restore_checkpoint(path: Path | None) -> bool:
+        """Restore from a checkpoint directory or prefix. Returns True if restored.
+
+        Safe behavior:
+        - If directory exists but contains no checkpoints, return False (don't error).
+        - If prefix/path doesn't exist, return False (don't error).
+        """
+        if path is None:
+            return False
+
+        p = Path(path)
+        ckpt_path: str | None = None
+
+        if p.exists() and p.is_dir():
+            ckpt_path = tf.train.latest_checkpoint(str(p))
+            if not ckpt_path:
+                return False
+        else:
+            # Could be a prefix like ".../ckpt/ckpt-000053" (checkpoint files have suffixes).
+            ckpt_path = str(p)
+
+        try:
+            status = ckpt.restore(ckpt_path)
+            status.expect_partial()
+        except Exception as e:
+            # Most commonly NotFoundError when the path/prefix doesn't match any checkpoint files.
+            typer.echo(f"Could not restore checkpoint from {ckpt_path}: {e}")
+            return False
+
+        typer.echo(f"Resumed checkpoint from {ckpt_path} (epoch={int(epoch_var.numpy())}).")
+        return True
+
+    restored = False
+    if resume_checkpoint is not None:
+        restored = _restore_checkpoint(resume_checkpoint)
+    if not restored:
+        restored = _restore_checkpoint(ckpt_dir)
+    if restored:
+        initial_epoch = int(epoch_var.numpy())
+
+    if resume_weights is not None:
+        # We save weights from `training_model.fit(...)` via ModelCheckpoint(save_weights_only=True),
+        # so resuming should load into the training model (it shares weights with inference_model).
+        training_model.load_weights(str(resume_weights))
+        m = re.search(r"weights\.(\d+)\.weights\.h5$", resume_weights.name)
+        if m:
+            # Keras epochs are 0-indexed; weights.001 corresponds to epoch=1 completed.
+            initial_epoch = int(m.group(1))
+        typer.echo(f"Resuming from {resume_weights} (initial_epoch={initial_epoch}).")
+
+    class CheckpointCallback(tf.keras.callbacks.Callback):
+        def on_epoch_end(self, epoch, logs=None):
+            # `epoch` is 0-indexed current epoch number; at end of epoch N we set next start to N+1.
+            epoch_var.assign(int(epoch) + 1)
+            path = manager.save(checkpoint_number=int(epoch_var.numpy()))
+            typer.echo(f"Saved checkpoint: {path}")
+
     class ValWerCallback(tf.keras.callbacks.Callback):
         def on_epoch_end(self, epoch, logs=None):
             avg = RunningAverage()
@@ -95,6 +173,7 @@ def train_liptype(
             save_weights_only=True,
         ),
         tf.keras.callbacks.TensorBoard(log_dir=str(run_dir / "tb")),
+        CheckpointCallback(),
         ValWerCallback(),
     ]
 
@@ -102,6 +181,7 @@ def train_liptype(
         train_ds,
         validation_data=val_ds,
         epochs=int(tr_cfg.get("epochs", 2)),
+        initial_epoch=initial_epoch,
         callbacks=callbacks,
     )
 

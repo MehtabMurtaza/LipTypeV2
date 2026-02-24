@@ -97,7 +97,27 @@ def make_dataset(
             "label_len": tf.expand_dims(tf.cast(label_len, tf.int32), axis=0),
         }, tf.zeros([1], tf.float32)
 
+    def _ctc_required_time(labels_1d: tf.Tensor, label_len_scalar: tf.Tensor) -> tf.Tensor:
+        """CTC requires enough timesteps for label transitions.
+
+        Minimum required time is label_len + repeats, where repeats counts adjacent equal labels
+        (CTC needs an extra blank to separate identical consecutive tokens).
+        """
+        ll = tf.cast(label_len_scalar, tf.int32)
+        seq = labels_1d[:ll]
+        repeats = tf.reduce_sum(tf.cast(tf.equal(seq[1:], seq[:-1]), tf.int32))
+        return ll + repeats
+
+    def _is_valid(ex, _y) -> tf.Tensor:
+        # ex["input_len"]/ex["label_len"] are [1] here; squeeze to scalars.
+        input_len = tf.squeeze(ex["input_len"], axis=0)
+        label_len = tf.squeeze(ex["label_len"], axis=0)
+        required = _ctc_required_time(ex["labels"], label_len)
+        return tf.logical_and(input_len > 0, tf.logical_and(label_len > 0, input_len >= required))
+
     ds = ds.map(_parse, num_parallel_calls=cfg.num_parallel_calls)
+    # Drop examples that can't satisfy CTC constraints (usually due to very short/failed video decode).
+    ds = ds.filter(_is_valid)
     ds = ds.batch(cfg.batch_size, drop_remainder=training)
     ds = ds.prefetch(tf.data.AUTOTUNE)
     return ds

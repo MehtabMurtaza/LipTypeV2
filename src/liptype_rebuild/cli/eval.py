@@ -13,8 +13,9 @@ def eval_liptype(
     config: Path = typer.Option(..., exists=True, dir_okay=False),
     weights: Path = typer.Option(..., exists=True, dir_okay=False),
     num_batches: int = typer.Option(50, min=1),
+    split: str = typer.Option("val", help="Which split to evaluate: train|val|test."),
 ):
-    """Evaluate LipType WER on the validation TFRecords configured in YAML."""
+    """Evaluate LipType WER on TFRecords configured in YAML."""
     import tensorflow as tf
 
     from liptype_rebuild.datasets.input_pipeline import PipelineConfig, make_dataset
@@ -55,7 +56,15 @@ def eval_liptype(
     _train, infer = build_models(model_cfg)
     infer.load_weights(str(weights))
 
-    val_ds = make_dataset(ds_cfg["tfrecords_val"], spec, pipe_cfg, training=False)
+    split = split.lower().strip()
+    if split == "train":
+        tfrec = ds_cfg["tfrecords_train"]
+    elif split == "test":
+        tfrec = ds_cfg["tfrecords_test"]
+    else:
+        tfrec = ds_cfg["tfrecords_val"]
+
+    val_ds = make_dataset(tfrec, spec, pipe_cfg, training=False)
     decode_cfg = DecodeConfig(beam_width=int(dec_cfg.get("beam_width", 50)))
 
     from liptype_rebuild.datasets.labels import Charset
@@ -76,5 +85,5 @@ def eval_liptype(
         for h, r in zip(hyps, refs):
             avg = avg.add(wer(h, r))
 
-    typer.echo(f"val_wer={avg.mean:.4f} over {avg.n} samples")
+    typer.echo(f"{split}_wer={avg.mean:.4f} over {avg.n} samples")
 

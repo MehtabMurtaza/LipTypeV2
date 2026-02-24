@@ -1,6 +1,7 @@
 dataset:
-  tfrecords_train: "rebuild_data/tfrecords_small2/train-*.tfrecord"
-  tfrecords_val: "rebuild_data/tfrecords_small2/val-*.tfrecord"
+  tfrecords_train: "rebuild_data/tfrecords_overlapped255/train-*.tfrecord"
+  tfrecords_val: "rebuild_data/tfrecords_overlapped255/val-*.tfrecord"
+  tfrecords_test: "rebuild_data/tfrecords_overlapped255/test-*.tfrecord"
   max_frames: 75
   img_h: 50
   img_w: 100
@@ -8,9 +9,9 @@ dataset:
   max_text_len: 32
 
 train:
-  batch_size: 4
-  epochs: 30
-  learning_rate: 1.0e-4
+  batch_size: 50
+  epochs: 550
+  learning_rate: 1.0e-5
   shuffle_buffer: 4096
   seed: 55
 
@@ -19,5 +20,5 @@ augment:
   temporal_jitter_prob: 0.05
 
 decode:
-  beam_width: 50
+  beam_width: 200
 

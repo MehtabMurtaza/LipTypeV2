@@ -34,7 +34,12 @@ def grid_to_tfrecords(
         raise typer.BadParameter("--split-config is required (YAML with val_speakers/train_speakers).")
 
     sc = load_split_config(split_config)
-    split = SplitSpec.from_seen_unseen(sc.train_speakers, sc.val_speakers)
+    # For overlapped_utterances mode we need utterance IDs to pick per-speaker validation samples.
+    from liptype_rebuild.datasets.grid import GridLayout
+
+    layout = GridLayout(root=input_root)
+    utt_ids = [(spk, vp.stem) for spk, vp, _ap in layout.iter_utterances()]
+    split = SplitSpec.from_config(sc, utt_ids)
 
     landmarks_backend = None
     if dlib_predictor is not None:

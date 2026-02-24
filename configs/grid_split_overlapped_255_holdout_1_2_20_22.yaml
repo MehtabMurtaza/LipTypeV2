@@ -1,0 +1,18 @@
+mode: overlapped_utterances
+seed: 42
+
+# Speakers to completely ignore (missing/corrupt).
+exclude_speakers:
+  - s21
+
+# Held-out speakers: written to TFRecords as `test-*.tfrecord`.
+test_speakers:
+  - s1
+  - s2
+  - s20
+  - s22
+
+# For all remaining speakers (not in test/exclude), randomly pick this many utterances
+# per speaker into validation (written to `val-*.tfrecord`). The rest go to train.
+val_utterances_per_speaker: 255
+

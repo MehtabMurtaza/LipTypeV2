@@ -79,7 +79,7 @@ def _build_backend(dlib_predictor: str | None) -> LandmarksBackend:
 
 def _process_shard(
     shard_id: int,
-    tasks: list[tuple[int, str, str, str, bool]],  # (idx, speaker_id, video_path, align_path, is_val)
+    tasks: list[tuple[int, str, str, str, str]],  # (idx, speaker_id, utterance_id, video_path, align_path, split)
     output_root: str,
     num_shards: int,
     max_frames: int,
@@ -88,7 +88,7 @@ def _process_shard(
     roi_cfg_dict: dict,
     spec_dict: dict,
 ) -> tuple[int, int]:
-    """Write TFRecords for one shard, return (n_train, n_val)."""
+    """Write TFRecords for one shard, return (n_train, n_val, n_test)."""
     output_root_p = Path(output_root)
     roi_cfg = MouthRoiConfig(**roi_cfg_dict)
     spec = ExampleSpec(**spec_dict)
@@ -98,13 +98,16 @@ def _process_shard(
     # Create both files (even if empty) to match the existing layout.
     train_path = output_root_p / f"train-{shard_id:05d}-of-{num_shards:05d}.tfrecord"
     val_path = output_root_p / f"val-{shard_id:05d}-of-{num_shards:05d}.tfrecord"
+    test_path = output_root_p / f"test-{shard_id:05d}-of-{num_shards:05d}.tfrecord"
     w_train = _writer_for(train_path)
     w_val = _writer_for(val_path)
+    w_test = _writer_for(test_path)
 
     n_train = 0
     n_val = 0
+    n_test = 0
     try:
-        for _idx, speaker_id, video_path, align_path, is_val in tasks:
+        for _idx, speaker_id, _utt_id, video_path, align_path, split_name in tasks:
             items = parse_align_file(align_path)
             sentence = align_to_sentence(items)
             label = charset.text_to_labels(sentence)
@@ -120,17 +123,21 @@ def _process_shard(
                 speaker_id=speaker_id,
                 spec=spec,
             )
-            if is_val:
+            if split_name == "val":
                 w_val.write(ex.SerializeToString())
                 n_val += 1
+            elif split_name == "test":
+                w_test.write(ex.SerializeToString())
+                n_test += 1
             else:
                 w_train.write(ex.SerializeToString())
                 n_train += 1
     finally:
         w_train.close()
         w_val.close()
+        w_test.close()
 
-    return n_train, n_val
+    return n_train, n_val, n_test
 
 
 @app.command("grid-to-tfrecords-parallel")
@@ -152,11 +159,14 @@ def grid_to_tfrecords_parallel(
 ):
     """Parallel version of GRID -> TFRecords conversion (shard-per-worker)."""
     sc = load_split_config(split_config)
-    split = SplitSpec.from_seen_unseen(sc.train_speakers, sc.val_speakers)
 
     utterances = _iter_utterances_stable(input_root)
     if max_examples and max_examples > 0:
         utterances = utterances[:max_examples]
+
+    # Build split with access to utterance ids for overlapped_utterances mode.
+    utt_ids = [(spk, vp.stem) for spk, vp, _ap in utterances]
+    split = SplitSpec.from_config(sc, utt_ids)
 
     # Same spec/ROI defaults as the existing converter.
     roi_cfg = MouthRoiConfig()
@@ -170,11 +180,13 @@ def grid_to_tfrecords_parallel(
         decode_max_frames_use = int(decode_max_frames)
 
     # Pre-assign tasks to shards in main process for stable distribution.
-    shard_tasks: list[list[tuple[int, str, str, str, bool]]] = [[] for _ in range(num_shards)]
+    shard_tasks: list[list[tuple[int, str, str, str, str, str]]] = [[] for _ in range(num_shards)]
     for idx, (speaker_id, video_path, align_path) in enumerate(utterances):
+        split_name = split.assign_split(speaker_id, video_path.stem)
+        if split_name == "skip":
+            continue
         shard = idx % num_shards
-        is_val = speaker_id in split.val_speakers
-        shard_tasks[shard].append((idx, speaker_id, str(video_path), str(align_path), is_val))
+        shard_tasks[shard].append((idx, speaker_id, str(video_path.stem), str(video_path), str(align_path), split_name))
 
     output_root.mkdir(parents=True, exist_ok=True)
 
@@ -205,18 +217,24 @@ def grid_to_tfrecords_parallel(
 
     n_train = sum(r[0] for r in results)
     n_val = sum(r[1] for r in results)
+    n_test = sum(r[2] for r in results)
 
     meta: dict = {
         "train_examples": n_train,
         "val_examples": n_val,
+        "test_examples": n_test,
         "num_shards": num_shards,
         "spec": asdict(spec),
         "roi_cfg": asdict(roi_cfg),
-        "train_speakers": sorted(list(split.train_speakers)),
+        "mode": split.mode,
         "val_speakers": sorted(list(split.val_speakers)),
+        "test_speakers": sorted(list(split.test_speakers)),
+        "exclude_speakers": sorted(list(split.exclude_speakers)),
     }
     (output_root / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    typer.echo(f"Wrote TFRecords to {output_root} (train={n_train}, val={n_val}, shards={num_shards})")
+    typer.echo(
+        f"Wrote TFRecords to {output_root} (train={n_train}, val={n_val}, test={n_test}, shards={num_shards})"
+    )
 
 
 @app.command("count-utterances")
