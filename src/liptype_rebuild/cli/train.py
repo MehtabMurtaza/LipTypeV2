@@ -25,6 +25,12 @@ def train_liptype(
             "Pass either the checkpoint directory (runs/<run_dir>/ckpt) or a specific prefix like ckpt-000053."
         ),
     ),
+    lr_scheduler: bool = typer.Option(
+        True,
+        "--lr-scheduler/--no-lr-scheduler",
+        help="If enabled and config has train.lr_schedule, apply a learning-rate scheduler callback.",
+        show_default=True,
+    ),
 ):
     """Train LipType recognizer from a config file."""
     import tensorflow as tf
@@ -176,6 +182,28 @@ def train_liptype(
         CheckpointCallback(),
         ValWerCallback(),
     ]
+
+    lr_cfg = tr_cfg.get("lr_schedule") if lr_scheduler else None
+    if lr_cfg:
+        sched_type = str(lr_cfg.get("type", "reduce_on_plateau")).strip().lower()
+        if sched_type in ("reduce_on_plateau", "plateau", "rop"):
+            callbacks.append(
+                tf.keras.callbacks.ReduceLROnPlateau(
+                    monitor=str(lr_cfg.get("monitor", "val_loss")),
+                    factor=float(lr_cfg.get("factor", 0.5)),
+                    patience=int(lr_cfg.get("patience", 4)),
+                    verbose=1,
+                    mode=str(lr_cfg.get("mode", "auto")),
+                    min_delta=float(lr_cfg.get("min_delta", 0.0)),
+                    cooldown=int(lr_cfg.get("cooldown", 0)),
+                    min_lr=float(lr_cfg.get("min_lr", 1e-6)),
+                )
+            )
+        else:
+            raise typer.BadParameter(
+                f"Unsupported train.lr_schedule.type={sched_type!r}. "
+                "Supported: reduce_on_plateau."
+            )
 
     training_model.fit(
         train_ds,

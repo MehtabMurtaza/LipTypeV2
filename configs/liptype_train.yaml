@@ -11,9 +11,19 @@ dataset:
 train:
   batch_size: 50
   epochs: 550
-  learning_rate: 1.0e-5
+  learning_rate: 1.0e-4
   shuffle_buffer: 4096
   seed: 55
+
+  lr_schedule:
+    type: reduce_on_plateau
+    monitor: val_loss
+    factor: 0.5
+    patience: 4
+    min_lr: 1.0e-6
+    cooldown: 0
+    min_delta: 0.0
+    mode: auto
 
 augment:
   horizontal_flip_prob: 0.5
