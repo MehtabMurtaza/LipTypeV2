@@ -155,7 +155,7 @@ def train_liptype(
         def on_epoch_end(self, epoch, logs=None):
             avg = RunningAverage()
             # evaluate a small number of batches to keep it fast
-            for b, (x, _y) in enumerate(val_ds.take(10)):
+            for b, (x, _y) in enumerate(val_ds.take(100)):
                 probs = inference_model(x["frames"], training=False)
                 inp_len = tf.squeeze(x["input_len"], axis=1)
                 sp = ctc_beam_decode(probs, inp_len, decode_cfg)
