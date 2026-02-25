@@ -5,6 +5,9 @@ dependencies:
   - python=3.10.19
   - pip=24.2
   - pip:
+      # Keep NumPy < 2 for binary wheels like OpenCV.
+      - numpy==1.26.4
+
       # TensorFlow 2.20 with NVIDIA CUDA libs via pip (no conda cudatoolkit needed)
       - tensorflow[and-cuda]==2.20.0
 

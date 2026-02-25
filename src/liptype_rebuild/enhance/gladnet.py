@@ -18,7 +18,8 @@ def build_gladnet(input_shape: tuple[int | None, int | None, int] = (None, None,
     inp = tf.keras.Input(shape=input_shape, name="low_light")
 
     # --- Global illumination estimation (downsample to 96x96) ---
-    x = tf.keras.layers.Resizing(96, 96, interpolation="nearest", name="resize_in_96")(inp)
+    # Use bilinear interpolation for stable gradients (also compatible with XLA if enabled).
+    x = tf.keras.layers.Resizing(96, 96, interpolation="bilinear", name="resize_in_96")(inp)
 
     # Encoder (3 down blocks)
     e1 = _conv(x, 64, 3, 2)  # 48
@@ -26,20 +27,20 @@ def build_gladnet(input_shape: tuple[int | None, int | None, int] = (None, None,
     e3 = _conv(e2, 64, 3, 2)  # 12
 
     # Decoder (3 up blocks) with skip connections
-    d1 = tf.keras.layers.Resizing(24, 24, interpolation="nearest", name="resize_d1_24")(e3)
+    d1 = tf.keras.layers.Resizing(24, 24, interpolation="bilinear", name="resize_d1_24")(e3)
     d1 = _conv(d1, 64, 3, 1)
     d1 = tf.keras.layers.Add()([d1, e2])
 
-    d2 = tf.keras.layers.Resizing(48, 48, interpolation="nearest", name="resize_d2_48")(d1)
+    d2 = tf.keras.layers.Resizing(48, 48, interpolation="bilinear", name="resize_d2_48")(d1)
     d2 = _conv(d2, 64, 3, 1)
     d2 = tf.keras.layers.Add()([d2, e1])
 
-    d3 = tf.keras.layers.Resizing(96, 96, interpolation="nearest", name="resize_d3_96")(d2)
+    d3 = tf.keras.layers.Resizing(96, 96, interpolation="bilinear", name="resize_d3_96")(d2)
     d3 = _conv(d3, 64, 3, 1)
 
     # Upsample illumination features back to original resolution
     illum = tf.keras.layers.Lambda(
-        lambda t: tf.image.resize(t[0], tf.shape(t[1])[1:3], method="nearest"),
+        lambda t: tf.image.resize(t[0], tf.shape(t[1])[1:3], method="bilinear", antialias=False),
         name="resize_illum_to_input",
     )([d3, inp])
 

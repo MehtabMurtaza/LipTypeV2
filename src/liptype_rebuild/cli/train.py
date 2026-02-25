@@ -318,7 +318,8 @@ def train_gladnet(
 
     model = build_gladnet()
     opt = tf.keras.optimizers.Adam(learning_rate=float(tr.get("learning_rate", 1e-3)))
-    model.compile(optimizer=opt, loss=MSSSIML1(alpha=alpha))
+    # Disable XLA JIT here: XLA can fail on some resize gradients depending on TF/CUDA build.
+    model.compile(optimizer=opt, loss=MSSSIML1(alpha=alpha), jit_compile=False)
 
     ckpt = tf.keras.callbacks.ModelCheckpoint(
         filepath=str(run_dir / "weights.{epoch:03d}.weights.h5"),
