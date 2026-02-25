@@ -25,14 +25,21 @@ class MSSSIML1(tf.keras.losses.Loss):
         # This loss assumes inputs have been resized to a sufficiently large size.
         ms_ssim = tf.image.ssim_multiscale(y_true, y_pred, max_val=1.0, filter_size=11)
         l1 = tf.reduce_mean(tf.abs(y_true - y_pred), axis=[1, 2, 3])
+
+        # Safety: if MS-SSIM ever becomes non-finite for a batch, ignore it for that batch
+        # instead of propagating NaNs into the training loop.
+        ms_ssim = tf.where(tf.math.is_finite(ms_ssim), ms_ssim, tf.zeros_like(ms_ssim))
+        l1 = tf.where(tf.math.is_finite(l1), l1, tf.zeros_like(l1))
         # Warmup: start with pure L1 (stable), then ramp MS-SSIM weight up to `alpha`.
         if self.warmup_steps > 0:
             w = tf.cast(self.step, tf.float32) / float(self.warmup_steps)
             w = tf.clip_by_value(w, 0.0, 1.0)
             ms_w = w * self.alpha
             l1_w = 1.0 - ms_w
-            return ms_w * (1.0 - ms_ssim) + l1_w * l1
+            loss = ms_w * (1.0 - ms_ssim) + l1_w * l1
+            return tf.where(tf.math.is_finite(loss), loss, l1)
 
         # Default (paper): fixed alpha
-        return self.alpha * (1.0 - ms_ssim) + (1.0 - self.alpha) * l1
+        loss = self.alpha * (1.0 - ms_ssim) + (1.0 - self.alpha) * l1
+        return tf.where(tf.math.is_finite(loss), loss, l1)
 
