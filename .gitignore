@@ -35,6 +35,7 @@ htmlcov/
 venv/
 ENV/
 env/
+.conda/
 
 # --- Python packaging / builds -------------------------------------
 build/

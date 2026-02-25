@@ -1,0 +1,28 @@
+name: liptype_gladnet_tf210
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Base
+  - python=3.10.19
+  - pip=24.2
+
+  # Match TF 2.10 CUDA stack (works if your cluster driver supports it)
+  - cudatoolkit=11.2.2
+  - cudnn=8.1.0
+
+  # Common runtime libs
+  - numpy=1.23.5
+
+  - pip:
+      # TensorFlow 2.10.x (GPU-enabled on Linux; uses the CUDA stack above)
+      - tensorflow==2.10.1
+
+      # Repo runtime deps (pinned)
+      - opencv-python==4.8.1.78
+      - pyyaml==6.0.1
+      - tqdm==4.66.2
+      - typer==0.12.3
+      - rich==13.7.1
+      - shellingham==1.5.4
+
