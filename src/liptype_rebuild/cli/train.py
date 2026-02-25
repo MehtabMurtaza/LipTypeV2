@@ -317,7 +317,11 @@ def train_gladnet(
     val_ds = _make_ds(val_pairs, training=False) if val_pairs else None
 
     model = build_gladnet()
-    opt = tf.keras.optimizers.Adam(learning_rate=float(tr.get("learning_rate", 1e-3)))
+    clipnorm = float(tr.get("clipnorm", 0.0) or 0.0)
+    opt = tf.keras.optimizers.Adam(
+        learning_rate=float(tr.get("learning_rate", 1e-3)),
+        clipnorm=(clipnorm if clipnorm > 0 else None),
+    )
     # Disable XLA JIT here: XLA can fail on some resize gradients depending on TF/CUDA build.
     model.compile(optimizer=opt, loss=MSSSIML1(alpha=alpha), jit_compile=False)
 
