@@ -18,5 +18,7 @@ train:
   learning_rate: 1.0e-4
   # Clip gradients to prevent NaNs right after the first update step.
   clipnorm: 1.0
+  # Warm up with pure L1 before introducing MS-SSIM (prevents NaNs at step 1).
+  warmup_steps: 2000
   seed: 55
 

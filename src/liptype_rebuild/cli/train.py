@@ -322,8 +322,18 @@ def train_gladnet(
         learning_rate=float(tr.get("learning_rate", 1e-3)),
         clipnorm=(clipnorm if clipnorm > 0 else None),
     )
+    warmup_steps = int(tr.get("warmup_steps", 0) or 0)
+    loss_obj = MSSSIML1(alpha=alpha, warmup_steps=warmup_steps)
+
+    class _LossStepCallback(tf.keras.callbacks.Callback):
+        def on_train_begin(self, logs=None):
+            loss_obj.step.assign(0)
+
+        def on_train_batch_end(self, batch, logs=None):
+            loss_obj.step.assign_add(1)
+
     # Disable XLA JIT here: XLA can fail on some resize gradients depending on TF/CUDA build.
-    model.compile(optimizer=opt, loss=MSSSIML1(alpha=alpha), jit_compile=False)
+    model.compile(optimizer=opt, loss=loss_obj, jit_compile=False)
 
     ckpt = tf.keras.callbacks.ModelCheckpoint(
         filepath=str(run_dir / "weights.{epoch:03d}.weights.h5"),
@@ -335,6 +345,7 @@ def train_gladnet(
         epochs=int(tr.get("epochs", 1)),
         callbacks=[
             tf.keras.callbacks.TerminateOnNaN(),
+            _LossStepCallback(),
             ckpt,
             tf.keras.callbacks.TensorBoard(str(run_dir / "tb")),
         ],
