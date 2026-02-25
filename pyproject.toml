@@ -13,7 +13,7 @@ authors = [
   { name = "LipType rebuild contributors" },
 ]
 dependencies = [
-  "tensorflow>=2.15",
+  "tensorflow>=2.10",
   "numpy>=1.24",
   "opencv-python>=4.8",
   "mediapipe>=0.10",

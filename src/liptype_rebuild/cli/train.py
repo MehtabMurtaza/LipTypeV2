@@ -27,8 +27,17 @@ def train_liptype(
     ),
     lr_scheduler: bool = typer.Option(
         True,
-        "--lr-scheduler/--no-lr-scheduler",
-        help="If enabled and config has train.lr_schedule, apply a learning-rate scheduler callback.",
+        "--lr-scheduler",
+        help=(
+            "If enabled and config has train.lr_schedule, apply a learning-rate scheduler callback. "
+            "Disable with --no-lr-scheduler."
+        ),
+        show_default=True,
+    ),
+    no_lr_scheduler: bool = typer.Option(
+        False,
+        "--no-lr-scheduler",
+        help="Disable learning-rate scheduler even if config has train.lr_schedule.",
         show_default=True,
     ),
 ):
@@ -183,7 +192,7 @@ def train_liptype(
         ValWerCallback(),
     ]
 
-    lr_cfg = tr_cfg.get("lr_schedule") if lr_scheduler else None
+    lr_cfg = tr_cfg.get("lr_schedule") if (lr_scheduler and not no_lr_scheduler) else None
     if lr_cfg:
         sched_type = str(lr_cfg.get("type", "reduce_on_plateau")).strip().lower()
         if sched_type in ("reduce_on_plateau", "plateau", "rop"):
