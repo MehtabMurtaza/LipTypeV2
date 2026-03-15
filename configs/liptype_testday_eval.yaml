@@ -1,0 +1,19 @@
+dataset:
+  tfrecords_train: "rebuild_data/tfrecords_liptype_test_ver10/test-*.tfrecord"
+  tfrecords_val: "rebuild_data/tfrecords_liptype_test_ver10/test-*.tfrecord"
+  tfrecords_test: "rebuild_data/tfrecords_liptype_test_ver10/test-*.tfrecord"
+  max_frames: 75
+  img_h: 50
+  img_w: 100
+  img_c: 3
+  # Allow longer phrases from README if you include ver7/ver10.
+  max_text_len: 120
+
+train:
+  batch_size: 8
+  seed: 55
+  shuffle_buffer: 512
+
+decode:
+  beam_width: 200
+

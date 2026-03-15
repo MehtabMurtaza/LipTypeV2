@@ -82,6 +82,9 @@ data/
 # GLADNet paired image dataset (keep local; do not commit)
 GladNetData/
 
+# LipType participant test dataset (keep local; do not commit)
+LipType_Test_Dataset/
+
 # Large third-party assets (prefer download step or Git LFS)
 assets/dlib/
 

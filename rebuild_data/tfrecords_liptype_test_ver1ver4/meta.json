@@ -1,0 +1,22 @@
+{
+  "test_examples": 1465,
+  "num_shards": 8,
+  "spec": {
+    "max_frames": 75,
+    "height": 50,
+    "width": 100,
+    "channels": 3,
+    "max_text_len": 32
+  },
+  "roi_cfg": {
+    "width": 100,
+    "height": 50,
+    "pad_ratio_x": 0.2,
+    "pad_ratio_y": 0.3
+  },
+  "include_vers": [
+    1
+  ],
+  "readme": "LipType_Test_Dataset\\README.txt",
+  "input_root": "LipType_Test_Dataset"
+}
