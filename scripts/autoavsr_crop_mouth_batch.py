@@ -35,6 +35,7 @@ class Args:
     glob: str
     output_root: Path
     detector: str
+    out_ext: str
     overwrite: bool
     max_files: int
 
@@ -46,15 +47,25 @@ def _parse_args() -> Args:
     p.add_argument("--glob", type=str, default="**/*.mp4")
     p.add_argument("--output-root", type=Path, required=True)
     p.add_argument("--detector", type=str, default="retinaface", choices=["retinaface", "mediapipe"])
+    p.add_argument(
+        "--out-ext",
+        type=str,
+        default="mp4",
+        help="Output extension (container). Use 'mp4' (recommended).",
+    )
     p.add_argument("--overwrite", action="store_true")
     p.add_argument("--max-files", type=int, default=0, help="If >0, stop after N videos.")
     ns = p.parse_args()
+    out_ext = str(ns.out_ext).strip().lstrip(".").lower()
+    if out_ext == "":
+        raise SystemExit("--out-ext must be a non-empty extension like 'mp4'.")
     return Args(
         autoavsr_root=ns.autoavsr_root,
         input_root=ns.input_root,
         glob=ns.glob,
         output_root=ns.output_root,
         detector=ns.detector,
+        out_ext=out_ext,
         overwrite=bool(ns.overwrite),
         max_files=int(ns.max_files),
     )
@@ -99,7 +110,7 @@ def main() -> int:
             break
 
         rel = in_path.relative_to(args.input_root)
-        out_path = args.output_root / rel
+        out_path = (args.output_root / rel).with_suffix(f".{args.out_ext}")
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         if out_path.exists() and not args.overwrite:

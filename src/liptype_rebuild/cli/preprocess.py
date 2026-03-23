@@ -168,3 +168,59 @@ def mouth_mp4_to_tfrecords(
     )
     typer.echo(f"Wrote test TFRecords to {output_root} (n={meta['test_examples']}).")
 
+
+@app.command("grid-mouth-mp4-to-tfrecords")
+def grid_mouth_mp4_to_tfrecords(
+    grid_root: Path = typer.Option(..., exists=True, file_okay=False, dir_okay=True, help="GRID root (data/s*_processed)."),
+    mouth_root: Path = typer.Option(
+        ...,
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        help="Root of Auto-AVSR aligned mouth videos (mirrors grid_root structure).",
+    ),
+    output_root: Path = typer.Option(..., file_okay=False, dir_okay=True),
+    split_config: Path = typer.Option(..., exists=True, dir_okay=False),
+    num_shards: int = typer.Option(64, min=1),
+    max_frames: int = typer.Option(75, min=1),
+    img_w: int = typer.Option(100, min=1),
+    img_h: int = typer.Option(50, min=1),
+    img_c: int = typer.Option(3, min=1, max=3),
+    max_text_len: int = typer.Option(32, min=1),
+    mouth_ext: str = typer.Option("mp4", help="Extension of aligned mouth videos under mouth_root (default mp4)."),
+    max_examples: int = typer.Option(0, min=0, help="If >0, stop after N examples."),
+):
+    """Convert GRID transcripts into TFRecords using pre-cropped mouth-only videos.
+
+    This is the GRID version of `mouth-mp4-to-tfrecords`, but it uses GRID's
+    `align/*.align` files to build labels, and writes train/val/test splits.
+    """
+    from liptype_rebuild.datasets.grid import GridLayout, SplitSpec
+    from liptype_rebuild.datasets.grid_mouth_mp4 import GridMouthMp4Config, convert_grid_mouth_mp4_to_tfrecords
+    from liptype_rebuild.datasets.splits import load_split_config
+
+    sc = load_split_config(split_config)
+    layout = GridLayout(root=grid_root)
+    utt_ids = [(spk, vp.stem) for spk, vp, _ap in layout.iter_utterances()]
+    split = SplitSpec.from_config(sc, utt_ids)
+
+    meta = convert_grid_mouth_mp4_to_tfrecords(
+        grid_root=grid_root,
+        mouth_root=mouth_root,
+        output_root=output_root,
+        split=split,
+        cfg=GridMouthMp4Config(mouth_ext=mouth_ext),
+        num_shards=num_shards,
+        max_frames=max_frames,
+        img_w=img_w,
+        img_h=img_h,
+        img_c=img_c,
+        max_text_len=max_text_len,
+        max_examples=(max_examples if max_examples > 0 else None),
+    )
+    typer.echo(
+        f"Wrote GRID mouth TFRecords to {output_root} "
+        f"(train={meta['train_examples']} val={meta['val_examples']} test={meta['test_examples']} "
+        f"missing={meta['missing_mouth_videos']} fail={meta['failed_examples']})."
+    )
+
