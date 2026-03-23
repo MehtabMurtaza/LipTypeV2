@@ -131,3 +131,40 @@ def liptype_test_to_tfrecords(
     )
     typer.echo(f"Wrote test TFRecords to {output_root} (n={meta['test_examples']}).")
 
+
+@app.command("mouth-mp4-to-tfrecords")
+def mouth_mp4_to_tfrecords(
+    input_root: Path = typer.Option(..., exists=True, file_okay=False, dir_okay=True, help="Root of mouth-only mp4s."),
+    readme: Path = typer.Option(..., exists=True, dir_okay=False, help="README.txt with ver/ph -> phrase table."),
+    output_root: Path = typer.Option(..., file_okay=False, dir_okay=True),
+    include_vers: str = typer.Option("10", help="Comma-separated silent-speech versions to include, e.g. '10' or '1,4'."),
+    num_shards: int = typer.Option(8, min=1),
+    max_frames: int = typer.Option(75, min=1),
+    img_w: int = typer.Option(100, min=1),
+    img_h: int = typer.Option(50, min=1),
+    img_c: int = typer.Option(3, min=1, max=3),
+    max_text_len: int = typer.Option(120, min=1),
+    max_examples: int = typer.Option(0, min=0, help="If >0, stop after N examples."),
+):
+    """Convert mouth-only mp4s (already aligned/cropped) into TFRecords (test split only)."""
+    from liptype_rebuild.datasets.mouth_mp4 import convert_mouth_mp4_to_tfrecords
+
+    vers = {int(v.strip()) for v in include_vers.split(",") if v.strip()}
+    if not vers:
+        raise typer.BadParameter("--include-vers must contain at least one integer version.")
+
+    meta = convert_mouth_mp4_to_tfrecords(
+        input_root=input_root,
+        readme_path=readme,
+        output_root=output_root,
+        include_vers=vers,
+        num_shards=num_shards,
+        max_frames=max_frames,
+        out_w=img_w,
+        out_h=img_h,
+        out_c=img_c,
+        max_text_len=max_text_len,
+        max_examples=(max_examples if max_examples > 0 else None),
+    )
+    typer.echo(f"Wrote test TFRecords to {output_root} (n={meta['test_examples']}).")
+

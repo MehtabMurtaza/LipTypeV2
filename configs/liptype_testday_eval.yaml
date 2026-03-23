@@ -1,7 +1,7 @@
 dataset:
-  tfrecords_train: "rebuild_data/tfrecords_liptype_test_ver10/test-*.tfrecord"
-  tfrecords_val: "rebuild_data/tfrecords_liptype_test_ver10/test-*.tfrecord"
-  tfrecords_test: "rebuild_data/tfrecords_liptype_test_ver10/test-*.tfrecord"
+  tfrecords_train: "rebuild_data/tfrecords_liptype_test_aligned_ver10/test-*.tfrecord"
+  tfrecords_val: "rebuild_data/tfrecords_liptype_test_aligned_ver10/test-*.tfrecord"
+  tfrecords_test: "rebuild_data/tfrecords_liptype_test_aligned_ver10/test-*.tfrecord"
   max_frames: 75
   img_h: 50
   img_w: 100

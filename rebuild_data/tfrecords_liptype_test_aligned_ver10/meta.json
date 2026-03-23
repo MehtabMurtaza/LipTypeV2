@@ -1,0 +1,17 @@
+{
+  "test_examples": 769,
+  "num_shards": 8,
+  "spec": {
+    "max_frames": 75,
+    "height": 50,
+    "width": 100,
+    "channels": 3,
+    "max_text_len": 120
+  },
+  "include_vers": [
+    10
+  ],
+  "readme": "LipType_Test_Dataset\\README.txt",
+  "input_root": "preprocess_out\\mouth_aligned_mp4",
+  "note": "Mouth-only mp4s resized to LipType input size."
+}
