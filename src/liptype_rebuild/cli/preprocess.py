@@ -188,6 +188,11 @@ def grid_mouth_mp4_to_tfrecords(
     img_c: int = typer.Option(3, min=1, max=3),
     max_text_len: int = typer.Option(32, min=1),
     mouth_ext: str = typer.Option("mp4", help="Extension of aligned mouth videos under mouth_root (default mp4)."),
+    progress_every: int = typer.Option(
+        250,
+        min=0,
+        help="Print a status line every N utterances processed (0 disables).",
+    ),
     max_examples: int = typer.Option(0, min=0, help="If >0, stop after N examples."),
 ):
     """Convert GRID transcripts into TFRecords using pre-cropped mouth-only videos.
@@ -216,6 +221,7 @@ def grid_mouth_mp4_to_tfrecords(
         img_h=img_h,
         img_c=img_c,
         max_text_len=max_text_len,
+        progress_every=progress_every,
         max_examples=(max_examples if max_examples > 0 else None),
     )
     typer.echo(

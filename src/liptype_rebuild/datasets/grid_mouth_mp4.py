@@ -63,6 +63,7 @@ def convert_grid_mouth_mp4_to_tfrecords(
     img_c: int = 3,
     max_text_len: int = 32,
     max_examples: int | None = None,
+    progress_every: int = 250,
 ):
     """Create GRID TFRecords from pre-cropped mouth-only mp4s.
 
@@ -80,6 +81,7 @@ def convert_grid_mouth_mp4_to_tfrecords(
       - output_root/meta.json
     """
     import json
+    import time
 
     if int(img_c) != 3:
         raise ValueError("Only RGB (img_c=3) is supported for mouth mp4 inputs.")
@@ -94,6 +96,13 @@ def convert_grid_mouth_mp4_to_tfrecords(
 
     layout = GridLayout(root=grid_root)
     charset = Charset()
+
+    utterances = list(layout.iter_utterances())
+    total = len(utterances)
+    print(
+        f"[grid_mouth_mp4] utterances={total} grid_root={grid_root} mouth_root={mouth_root} out={output_root}",
+        flush=True,
+    )
 
     writers_train = [
         _writer_for(output_root / f"train-{i:05d}-of-{num_shards:05d}.tfrecord") for i in range(int(num_shards))
@@ -112,8 +121,16 @@ def convert_grid_mouth_mp4_to_tfrecords(
     n_fail = 0
 
     mouth_ext = str(cfg.mouth_ext).strip().lstrip(".").lower()
+    t0 = time.time()
+    n_seen = 0
     try:
-        for idx, (speaker_id, video_path, align_path) in enumerate(tqdm(layout.iter_utterances(), desc="grid_mouth")):
+        it = utterances
+        if max_examples is not None:
+            it = utterances[: int(max_examples)]
+
+        for idx, (speaker_id, video_path, align_path) in enumerate(
+            tqdm(it, desc="grid_mouth", total=len(it), mininterval=2.0)
+        ):
             if max_examples is not None and idx >= int(max_examples):
                 break
 
@@ -125,6 +142,15 @@ def convert_grid_mouth_mp4_to_tfrecords(
             mouth_path = (mouth_root / rel).with_suffix(f".{mouth_ext}")
             if not mouth_path.exists():
                 n_missing += 1
+                n_seen += 1
+                if progress_every > 0 and (n_seen % int(progress_every) == 0):
+                    dt = max(1e-6, time.time() - t0)
+                    rate = n_seen / dt
+                    print(
+                        f"[grid_mouth_mp4] seen={n_seen}/{len(it)} ok={n_train+n_val+n_test} "
+                        f"missing={n_missing} fail={n_fail} rate={rate:.2f}/s (last_missing={mouth_path})",
+                        flush=True,
+                    )
                 continue
 
             try:
@@ -156,7 +182,16 @@ def convert_grid_mouth_mp4_to_tfrecords(
                     n_train += 1
             except Exception:
                 n_fail += 1
-                continue
+            finally:
+                n_seen += 1
+                if progress_every > 0 and (n_seen % int(progress_every) == 0):
+                    dt = max(1e-6, time.time() - t0)
+                    rate = n_seen / dt
+                    print(
+                        f"[grid_mouth_mp4] seen={n_seen}/{len(it)} train={n_train} val={n_val} test={n_test} "
+                        f"missing={n_missing} fail={n_fail} rate={rate:.2f}/s",
+                        flush=True,
+                    )
     finally:
         for w in writers_train + writers_val + writers_test:
             w.close()
@@ -167,6 +202,7 @@ def convert_grid_mouth_mp4_to_tfrecords(
         "test_examples": n_test,
         "missing_mouth_videos": n_missing,
         "failed_examples": n_fail,
+        "total_utterances": total,
         "num_shards": int(num_shards),
         "spec": spec.__dict__,
         "grid_root": str(grid_root),
