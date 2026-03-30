@@ -1,0 +1,22 @@
+dataset:
+  grid_root: "data"
+  split_config: "configs/grid_split_overlapped_255_holdout_1_2_20_22.yaml"
+  output_root: "rebuild_data/tfrecords_grid_paper"
+  num_shards: 64
+  max_frames: 75
+  max_text_len: 32
+
+preprocess:
+  detector_device: "cpu" # set to "cuda:0" on GPU nodes if ibug is CUDA-enabled
+  crop_w: 100
+  crop_h: 50
+  pad_ratio_x: 0.19
+  pad_ratio_y: 0.30
+  target_w: 256
+  target_h: 256
+  stable_points: "28,33,36,39,42,45,48,54"
+  canonical_68_npy: null # optional path to [68,2] normalized canonical face template
+  kalman_process_noise: 1.0e-4
+  kalman_measurement_noise: 5.0e-3
+  progress_every: 200
+
