@@ -18,6 +18,10 @@ def qualitative_liptype(
     print_n: int = typer.Option(20, min=0, help="Print first N samples to stdout."),
     beam_width: int = typer.Option(200, min=1),
     batch_size: int = typer.Option(1, min=1),
+    lm_path: Path | None = typer.Option(None, exists=True, dir_okay=False, help="Optional KenLM binary path."),
+    lm_weight: float | None = typer.Option(None, help="LM interpolation weight for N-best rescoring."),
+    length_bonus: float | None = typer.Option(None, help="Length bonus per non-space character."),
+    top_paths: int | None = typer.Option(None, min=1, help="Top-N CTC paths for optional LM rescoring."),
 ):
     """Dump hypothesis vs reference for TFRecords, with per-sample WER."""
     import tensorflow as tf
@@ -25,13 +29,15 @@ def qualitative_liptype(
     from liptype_rebuild.datasets.labels import Charset
     from liptype_rebuild.datasets.qualitative_pipeline import QualPipelineConfig, make_qual_dataset
     from liptype_rebuild.datasets.tfrecords import ExampleSpec
-    from liptype_rebuild.model.ctc_decode import DecodeConfig, ctc_beam_decode, sparse_to_texts
+    from liptype_rebuild.model.ctc_decode import DecodeConfig, ctc_beam_decode, ctc_beam_decode_nbest, nbest_sparse_to_texts, sparse_to_texts
+    from liptype_rebuild.model.kenlm_rescore import KenLMConfig, load_kenlm_model, rescore_nbest
     from liptype_rebuild.model.liptype import LipTypeConfig, build_models
     from liptype_rebuild.utils.config import load_yaml
     from liptype_rebuild.utils.metrics import wer
 
     cfg = load_yaml(config)
     ds_cfg = cfg["dataset"]
+    dec_cfg = cfg.get("decode", {})
 
     spec = ExampleSpec(
         max_frames=int(ds_cfg["max_frames"]),
@@ -61,8 +67,21 @@ def qualitative_liptype(
         tfrec = ds_cfg["tfrecords_test"]
 
     ds = make_qual_dataset(tfrec, spec, QualPipelineConfig(batch_size=batch_size))
-    decode_cfg = DecodeConfig(beam_width=int(beam_width))
+    lm_path_cfg = lm_path if lm_path is not None else (Path(dec_cfg["lm_path"]) if dec_cfg.get("lm_path") else None)
+    use_lm = lm_path_cfg is not None
+    top_paths_cfg = int(top_paths if top_paths is not None else dec_cfg.get("top_paths", 10 if use_lm else 1))
+    decode_cfg = DecodeConfig(beam_width=int(beam_width), top_paths=top_paths_cfg)
     cs = Charset()
+    lm_model = None
+    lm_cfg = None
+    if use_lm:
+        lm_cfg = KenLMConfig(
+            lm_path=lm_path_cfg,
+            lm_weight=float(lm_weight if lm_weight is not None else dec_cfg.get("lm_weight", 0.3)),
+            length_bonus=float(length_bonus if length_bonus is not None else dec_cfg.get("length_bonus", 0.0)),
+            top_paths=top_paths_cfg,
+        )
+        lm_model = load_kenlm_model(lm_cfg.lm_path)
 
     out_jsonl.parent.mkdir(parents=True, exist_ok=True)
     n = 0
@@ -75,9 +94,18 @@ def qualitative_liptype(
                 break
 
             probs = infer(batch["frames"], training=False)
+            batch_n = int(tf.shape(probs)[0].numpy())
             inp_len = tf.squeeze(batch["input_len"], axis=1)
-            sp = ctc_beam_decode(probs, inp_len, decode_cfg)
-            hyps = sparse_to_texts(sp, cs)
+            if use_lm:
+                decoded_paths, ctc_scores = ctc_beam_decode_nbest(probs, inp_len, decode_cfg)
+                nbest = nbest_sparse_to_texts(decoded_paths, cs, batch_size=batch_n)
+                hyps = []
+                for cand, scores in zip(nbest, ctc_scores):
+                    best, _best_idx, _combined = rescore_nbest(cand, scores.tolist(), lm_cfg, model=lm_model)
+                    hyps.append(best)
+            else:
+                sp = ctc_beam_decode(probs, inp_len, decode_cfg)
+                hyps = sparse_to_texts(sp, cs, batch_size=batch_n)
 
             labels = batch["labels"].numpy()
             label_lens = tf.squeeze(batch["label_len"], axis=1).numpy().tolist()

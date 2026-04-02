@@ -1,0 +1,12 @@
+decode:
+  # Keep the same TF CTC beam decoder, then rescore top-N with KenLM.
+  beam_width: 200
+  top_paths: 10
+  lm_path: "runs/lm/grid_char_5gram.binary"
+  lm_weight: 0.3
+  length_bonus: 0.0
+
+# Minimal tuning protocol on a fixed validation split:
+#   lm_weight  in [0.1, 0.3, 0.5, 0.8]
+#   top_paths  in [5, 10, 25]
+# Keep beam_width fixed while tuning these two.

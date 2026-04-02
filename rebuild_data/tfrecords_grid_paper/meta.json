@@ -1,0 +1,51 @@
+{
+  "pipeline": "paper_style_dlib_ibug68_kalman_affine",
+  "train_examples": 21605,
+  "val_examples": 7395,
+  "test_examples": 4000,
+  "failed_examples": 0,
+  "skipped_examples": 0,
+  "seen_examples": 33000,
+  "elapsed_sec": 163179.00724577904,
+  "num_shards": 64,
+  "spec": {
+    "max_frames": 75,
+    "height": 50,
+    "width": 100,
+    "channels": 3,
+    "max_text_len": 32
+  },
+  "paper_preproc_cfg": {
+    "crop_w": 100,
+    "crop_h": 50,
+    "pad_ratio_x": 0.19,
+    "pad_ratio_y": 0.3,
+    "target_w": 256,
+    "target_h": 256,
+    "stable_points": [
+      28,
+      33,
+      36,
+      39,
+      42,
+      45,
+      48,
+      54
+    ],
+    "canonical_68_npy": null,
+    "kalman_process_noise": 0.0001,
+    "kalman_measurement_noise": 0.005
+  },
+  "input_root": "/home/smurtaza/data/LipTypeV2/data",
+  "mode": "overlapped_utterances",
+  "val_speakers": [],
+  "test_speakers": [
+    "s1",
+    "s2",
+    "s20",
+    "s22"
+  ],
+  "exclude_speakers": [
+    "s21"
+  ]
+}
