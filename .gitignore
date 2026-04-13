@@ -84,6 +84,7 @@ GladNetData/
 
 # LipType participant test dataset (keep local; do not commit)
 LipType_Test_Dataset/
+Version10_phrase_dataset/
 
 # Large third-party assets (prefer download step or Git LFS)
 assets/dlib/

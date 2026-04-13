@@ -366,3 +366,99 @@ def train_lm(
     lm.save(output_json)
     typer.echo(f"Saved LM to {output_json}")
 
+
+@app.command("dda")
+def train_dda(
+    corpus_txt: Path = typer.Option(..., exists=True, dir_okay=False, help="Plain-text corpus (one sentence per line)."),
+    run_dir: Path = typer.Option(..., file_okay=False, dir_okay=True),
+    max_sentences: int = typer.Option(200_000, min=1),
+    train_sentences: int = typer.Option(100_000, min=1),
+    seq_len: int = typer.Option(28, min=1),
+    hidden: str = typer.Option("128,64,32,64,128", help="Comma-separated hidden sizes."),
+    test_ratio: float = typer.Option(0.2, min=0.01, max=0.9),
+    epochs: int = typer.Option(50, min=1),
+    batch_size: int = typer.Option(128, min=1),
+    learning_rate: float = typer.Option(1e-3, min=1e-8),
+    seed: int = typer.Option(55, min=0),
+):
+    """Train paper-style DDA for post-recognition character error reduction."""
+    import json
+    import tensorflow as tf
+
+    from liptype_rebuild.postprocess.dda import DDAConfig, build_dda
+    from liptype_rebuild.postprocess.dda_data import (
+        DDADatasetConfig,
+        build_dda_arrays,
+        make_noisy_clean_sentence_pairs,
+        train_test_split_pairs,
+    )
+
+    hs = tuple(int(x.strip()) for x in hidden.split(",") if x.strip())
+    if not hs:
+        raise typer.BadParameter("--hidden must contain at least one layer size.")
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    lines = corpus_txt.read_text(encoding="utf-8", errors="ignore").splitlines()
+    dcfg = DDADatasetConfig(
+        seq_len=int(seq_len),
+        max_sentences=int(max_sentences),
+        train_sentences=int(train_sentences),
+        seed=int(seed),
+    )
+    noisy, clean = make_noisy_clean_sentence_pairs(lines, dcfg)
+    ntr_noisy, ntr_clean, nte_noisy, nte_clean = train_test_split_pairs(noisy, clean, test_ratio=float(test_ratio))
+
+    x_train, y_train = build_dda_arrays(ntr_noisy, ntr_clean, seq_len=dcfg.seq_len)
+    x_test, y_test = build_dda_arrays(nte_noisy, nte_clean, seq_len=dcfg.seq_len)
+    if x_train.shape[0] == 0:
+        raise typer.BadParameter("DDA training set is empty after preprocessing. Check corpus file.")
+
+    mcfg = DDAConfig(hidden=hs, seq_len=dcfg.seq_len, vocab_dim=28)
+    model = build_dda(mcfg)
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=float(learning_rate)),
+        loss="binary_crossentropy",
+        metrics=[tf.keras.metrics.BinaryAccuracy(name="bin_acc")],
+    )
+
+    callbacks: list[tf.keras.callbacks.Callback] = [
+        tf.keras.callbacks.ModelCheckpoint(
+            filepath=str(run_dir / "dda.weights.{epoch:03d}.h5"),
+            save_weights_only=True,
+        ),
+        tf.keras.callbacks.TensorBoard(log_dir=str(run_dir / "tb")),
+    ]
+
+    history = model.fit(
+        x_train,
+        y_train,
+        validation_data=(x_test, y_test) if x_test.shape[0] > 0 else None,
+        epochs=int(epochs),
+        batch_size=int(batch_size),
+        callbacks=callbacks,
+        verbose=1,
+    )
+
+    final_weights = run_dir / "dda.final.weights.h5"
+    model.save_weights(str(final_weights))
+
+    meta = {
+        "seq_len": dcfg.seq_len,
+        "vocab_dim": 28,
+        "hidden": list(hs),
+        "train_pairs": len(ntr_noisy),
+        "test_pairs": len(nte_noisy),
+        "train_chunks": int(x_train.shape[0]),
+        "test_chunks": int(x_test.shape[0]),
+        "epochs": int(epochs),
+        "batch_size": int(batch_size),
+        "learning_rate": float(learning_rate),
+        "seed": int(seed),
+        "history_keys": list(history.history.keys()),
+        "final_weights": str(final_weights),
+    }
+    (run_dir / "dda_meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    typer.echo(f"Saved DDA weights: {final_weights}")
+    typer.echo(f"Saved DDA metadata: {run_dir / 'dda_meta.json'}")
+

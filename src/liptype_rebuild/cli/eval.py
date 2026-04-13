@@ -118,3 +118,70 @@ def eval_liptype(
 
     typer.echo(f"{split}_wer={avg.mean:.4f} over {avg.n} samples")
 
+
+@app.command("repair")
+def eval_repair(
+    pairs_tsv: Path = typer.Option(..., exists=True, dir_okay=False, help="TSV: <ref>\\t<hyp> per line."),
+    repair_lm: Path = typer.Option(..., exists=True, dir_okay=False),
+    repair_dict: Path = typer.Option(..., exists=True, dir_okay=False),
+    repair_spell_corpus: Path = typer.Option(None, exists=True, dir_okay=False),
+    repair_dda_weights: Path = typer.Option(None, exists=True, dir_okay=False),
+    tau1_values: str = typer.Option("0.7", help="Comma-separated tau1 values, e.g. 0.5,0.7,0.9"),
+    tau2_values: str = typer.Option("2", help="Comma-separated tau2 values, e.g. 1,2,3"),
+    max_samples: int = typer.Option(0, min=0, help="If >0, evaluate only first N pairs."),
+):
+    """Evaluate post-error-correction module on ref/hyp sentence pairs."""
+    from liptype_rebuild.postprocess.dda import DDAConfig, apply_dda_to_text, load_dda
+    from liptype_rebuild.postprocess.ngram_lm import BiTrigramLM
+    from liptype_rebuild.postprocess.repair import RepairConfig, RepairModel
+    from liptype_rebuild.postprocess.spell import NorvigSpell
+    from liptype_rebuild.utils.metrics import wer
+
+    taus1 = [float(x.strip()) for x in tau1_values.split(",") if x.strip()]
+    taus2 = [int(x.strip()) for x in tau2_values.split(",") if x.strip()]
+    if not taus1 or not taus2:
+        raise typer.BadParameter("tau1_values/tau2_values must not be empty.")
+
+    lines = pairs_tsv.read_text(encoding="utf-8", errors="ignore").splitlines()
+    pairs: list[tuple[str, str]] = []
+    for ln in lines:
+        if "\t" not in ln:
+            continue
+        ref, hyp = ln.split("\t", 1)
+        pairs.append((ref.strip().lower(), hyp.strip().lower()))
+        if max_samples > 0 and len(pairs) >= max_samples:
+            break
+    if not pairs:
+        raise typer.BadParameter("No valid pairs found. Expected TSV lines: <ref>\\t<hyp>.")
+
+    lm = BiTrigramLM.load(repair_lm)
+    dict_words = repair_dict.read_text(encoding="utf-8", errors="ignore").splitlines()
+    spell = NorvigSpell.from_file(str(repair_spell_corpus)) if repair_spell_corpus else None
+    dda = load_dda(str(repair_dda_weights), DDAConfig()) if repair_dda_weights else None
+
+    baseline = sum(wer(h, r) for r, h in pairs) / float(len(pairs))
+    typer.echo(f"baseline_wer={baseline:.4f} over {len(pairs)} samples")
+
+    best = (10.0, None, None)  # (wer, tau1, tau2)
+    for t1 in taus1:
+        for t2 in taus2:
+            model = RepairModel(
+                lm=lm,
+                dictionary_words=dict_words,
+                spell=spell,
+                cfg=RepairConfig(tau1=float(t1), tau2=int(t2)),
+            )
+            total = 0.0
+            for ref, hyp in pairs:
+                x = hyp
+                if dda is not None:
+                    x = apply_dda_to_text(dda, x, DDAConfig())
+                rep = model.repair_sentence(x)
+                total += wer(rep, ref)
+            w = total / float(len(pairs))
+            typer.echo(f"tau1={t1:.3f} tau2={t2} repaired_wer={w:.4f}")
+            if w < best[0]:
+                best = (w, t1, t2)
+
+    typer.echo(f"best_repaired_wer={best[0]:.4f} at tau1={best[1]:.3f}, tau2={int(best[2])}")
+

@@ -213,6 +213,72 @@ python -m liptype_rebuild.cli.entrypoint eval liptype `
 
 ---
 
+## Post-error-correction model (DDA + spell + bi-trigram LM)
+
+### 1) Train DDA (paper-style noisy/clean character denoising)
+
+```powershell
+conda activate liptype_win_cuda_clean
+cd C:\Mehtab_work\project_liptype\LipTypeV2
+
+python -m liptype_rebuild.cli.entrypoint train dda `
+  --corpus-txt postprocessing\LM-corpus.txt `
+  --run-dir runs\dda_paper `
+  --max-sentences 200000 `
+  --train-sentences 100000 `
+  --seq-len 28 `
+  --hidden "128,64,32,64,128" `
+  --test-ratio 0.2 `
+  --epochs 50 `
+  --batch-size 128 `
+  --learning-rate 1e-3 `
+  --seed 55
+```
+
+Outputs:
+- `runs\dda_paper\dda.final.weights.h5`
+- `runs\dda_paper\dda_meta.json`
+
+### 2) Train bidirectional trigram LM
+
+```powershell
+python -m liptype_rebuild.cli.entrypoint train lm `
+  --corpus-txt postprocessing\LM-corpus.txt `
+  --output-json runs\repair_lm.json `
+  --min-count 2
+```
+
+### 3) Use DDA+LM repair at prediction time
+
+```powershell
+python -m liptype_rebuild.cli.entrypoint predict liptype `
+  --weights runs\liptype_overlapped\weights.019.weights.h5 `
+  --video "C:\Mehtab_work\project_liptype\LipTypeV2\data\s1_processed\bbaf2n.mpg" `
+  --repair-dda-weights runs\dda_paper\dda.final.weights.h5 `
+  --repair-lm runs\repair_lm.json `
+  --repair-dict postprocessing\labels.txt `
+  --repair-spell-corpus postprocessing\LM-corpus.txt `
+  --dlib-predictor "C:\Mehtab_work\project_liptype\LipTypeV2\assets\dlib\shape_predictor_68_face_landmarks.dat"
+```
+
+### 4) Sweep `tau1/tau2` on reference-vs-hypothesis TSV
+
+TSV format:
+- one line per sample: `<reference>\t<hypothesis>`
+
+```powershell
+python -m liptype_rebuild.cli.entrypoint eval repair `
+  --pairs-tsv runs\qual_pairs_test.tsv `
+  --repair-lm runs\repair_lm.json `
+  --repair-dict postprocessing\labels.txt `
+  --repair-spell-corpus postprocessing\LM-corpus.txt `
+  --repair-dda-weights runs\dda_paper\dda.final.weights.h5 `
+  --tau1-values "0.5,0.6,0.7,0.8,0.9" `
+  --tau2-values "1,2,3"
+```
+
+---
+
 ## Qualitative decode (print REF/HYP/WER) — train/val/test
 
 ```powershell

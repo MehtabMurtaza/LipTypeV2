@@ -19,6 +19,12 @@ def predict_liptype(
     repair_lm: Path = typer.Option(None, exists=True, dir_okay=False, help="Path to saved BiTrigramLM json."),
     repair_dict: Path = typer.Option(None, exists=True, dir_okay=False, help="Dictionary word list (one per line)."),
     repair_spell_corpus: Path = typer.Option(None, exists=True, dir_okay=False, help="Optional corpus for Norvig spell."),
+    repair_dda_weights: Path = typer.Option(
+        None,
+        exists=True,
+        dir_okay=False,
+        help="Optional: DDA weights (dda.final.weights.h5) for character-level denoising before LM repair.",
+    ),
     dlib_predictor: Path = typer.Option(None, exists=True, dir_okay=False, help="Path to dlib 68-landmark predictor .dat file."),
     enhance_weights: Path = typer.Option(
         None,
@@ -77,6 +83,12 @@ def predict_liptype(
     sp = ctc_beam_decode(probs, inp_len, DecodeConfig(beam_width=beam_width))
     texts = sparse_to_texts(sp)
     text = texts[0] if texts else ""
+
+    if repair_dda_weights is not None:
+        from liptype_rebuild.postprocess.dda import DDAConfig, apply_dda_to_text, load_dda
+
+        dda = load_dda(str(repair_dda_weights), DDAConfig())
+        text = apply_dda_to_text(dda, text, DDAConfig())
 
     if repair_lm is not None and repair_dict is not None:
         from liptype_rebuild.postprocess.ngram_lm import BiTrigramLM
