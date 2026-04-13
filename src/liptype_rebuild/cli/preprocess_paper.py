@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 import typer
 
@@ -33,7 +34,7 @@ def grid_to_tfrecords(
         "28,33,36,39,42,45,48,54",
         help="Comma-separated 0-based stable landmark indices used for affine fitting.",
     ),
-    canonical_68_npy: Path = typer.Option(
+    canonical_68_npy: Optional[Path] = typer.Option(
         None,
         exists=True,
         dir_okay=False,
@@ -117,7 +118,7 @@ def liptype_test_to_tfrecords(
         "28,33,36,39,42,45,48,54",
         help="Comma-separated 0-based stable landmark indices used for affine fitting.",
     ),
-    canonical_68_npy: Path = typer.Option(
+    canonical_68_npy: Optional[Path] = typer.Option(
         None,
         exists=True,
         dir_okay=False,
