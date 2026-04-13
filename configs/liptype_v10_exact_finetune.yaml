@@ -1,0 +1,27 @@
+dataset:
+  # TFRecords already created from Version10_phrase_dataset
+  tfrecords_train: "rebuild_data/tfrecords_v10_phrase_trainval/train-*.tfrecord"
+  tfrecords_val: "rebuild_data/tfrecords_v10_phrase_trainval/val-*.tfrecord"
+  # Optional: keep test same as val for this closed-set phrase task.
+  tfrecords_test: "rebuild_data/tfrecords_v10_phrase_trainval/val-*.tfrecord"
+  max_frames: 75
+  img_h: 50
+  img_w: 100
+  img_c: 3
+  max_text_len: 40
+
+train:
+  # Small dataset (209/52), so use smaller batch + low LR for stable adaptation.
+  batch_size: 8
+  epochs: 300
+  learning_rate: 2.0e-5
+  shuffle_buffer: 512
+  seed: 55
+
+augment:
+  # Keep light augmentation; set both to 0.0 if you want stronger memorization.
+  horizontal_flip_prob: 0.1
+  temporal_jitter_prob: 0.0
+
+decode:
+  beam_width: 200

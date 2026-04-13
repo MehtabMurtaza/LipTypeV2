@@ -23,7 +23,7 @@ _README_ROW_RE = re.compile(r"^P-id-SSpeech-ver(?P<ver>\d+)-Ph(?P<ph>\d+)\s+(?P<
 # - P01SSpeech-ver10-Ph10202023-052057.mp4
 # - P02_SSpeech-ver1-_Ph18_NL202021-022052.mp4
 _FILE_RE = re.compile(
-    r"^P(?P<pnum>\d{1,2})_?SSpeech-ver(?P<ver>\d+)-_?Ph(?P<ph>\d{1,2}).*\.mp4$",
+    r"^P(?P<pnum>\d{1,2})_?SSpeech-ver(?P<ver>\d+)-_?Ph(?P<digits>\d+)(?P<suffix>[^0-9].*)?\.mp4$",
     re.IGNORECASE,
 )
 
@@ -60,12 +60,80 @@ class TestVideo:
     phrase: str
 
 
-def iter_silent_speech_videos(
+def _parse_filename_ids(
+    name: str, valid_phrases_by_ver: dict[int, set[int]] | None = None
+) -> tuple[int, int, int] | None:
+    """Parse participant number, version, and phrase index from a filename.
+
+    Handles both patterns:
+      - P01SSpeech-ver10-Ph10202023-052057.mp4  (compact; phrase prefix + date digits)
+      - P02_SSpeech-ver10-_Ph18_NL202021-022052.mp4  (explicit separator after phrase)
+    """
+    m = _FILE_RE.match(name)
+    if not m:
+        return None
+    pnum = int(m.group("pnum"))
+    ver = int(m.group("ver"))
+    digits = m.group("digits")
+    suffix = m.group("suffix") or ""
+
+    ph: int | None = None
+    # Underscore style has explicit phrase boundary.
+    if suffix.startswith("_"):
+        ph = int(digits)
+    # Compact style often appends 6 date digits before '-' separator.
+    elif suffix.startswith("-") and len(digits) >= 7:
+        core = digits[:-6]
+        if core.isdigit():
+            ph = int(core)
+
+    # Fallback for unexpected patterns.
+    if ph is None:
+        ph = int(digits)
+
+    valid_phrases_for_ver = (valid_phrases_by_ver or {}).get(ver, set())
+    if valid_phrases_for_ver and ph not in valid_phrases_for_ver:
+        # Ambiguous compact strings like "10202023" can mean ph=1 + date, not ph=10.
+        # Try 1- and 2-digit prefixes and pick the first valid candidate.
+        candidates: list[int] = []
+        if len(digits) >= 1:
+            candidates.append(int(digits[:1]))
+        if len(digits) >= 2:
+            candidates.append(int(digits[:2]))
+        if len(digits) >= 7 and digits[:-6].isdigit():
+            candidates.append(int(digits[:-6]))
+        for cand in candidates:
+            if cand in valid_phrases_for_ver:
+                ph = cand
+                break
+
+    return pnum, ver, ph
+
+
+def collect_silent_speech_videos(
     input_root: Path,
     phrases: dict[tuple[int, int], str],
     include_vers: set[int],
-) -> Iterator[TestVideo]:
-    """Iterate raw participant videos under LipType_Test_Dataset/*/data/silent speech/*.mp4."""
+    dedup_trailing_one: bool = True,
+) -> tuple[list[TestVideo], dict]:
+    """Collect raw participant videos under LipType_Test_Dataset/*/data/silent speech/*.mp4.
+
+    Returns (videos, stats) where stats helps audit mapping correctness.
+    """
+    valid_by_ver: dict[int, set[int]] = {}
+    for (ver, ph), _txt in phrases.items():
+        valid_by_ver.setdefault(ver, set()).add(ph)
+
+    out: list[TestVideo] = []
+    stats = {
+        "total_files_scanned": 0,
+        "included_examples": 0,
+        "skipped_dedup_trailing1": 0,
+        "skipped_unparsed_name": 0,
+        "skipped_version": 0,
+        "skipped_unmapped_phrase": 0,
+    }
+
     for pdir in sorted([p for p in input_root.iterdir() if p.is_dir() and p.name.lower().startswith("p")]):
         silent_dir = pdir / "data" / "silent speech"
         if not silent_dir.exists():
@@ -74,23 +142,44 @@ def iter_silent_speech_videos(
         name_set = {p.name for p in all_mp4}
 
         for vp in all_mp4:
+            stats["total_files_scanned"] += 1
             # Light de-dup only for the very common "same file + trailing 1" pattern.
-            if vp.name.endswith("1.mp4"):
+            if dedup_trailing_one and vp.name.endswith("1.mp4"):
                 base = vp.name[:-5] + ".mp4"
                 if base in name_set:
+                    stats["skipped_dedup_trailing1"] += 1
                     continue
 
-            m = _FILE_RE.match(vp.name)
-            if not m:
+            parsed = _parse_filename_ids(vp.name, valid_phrases_by_ver=valid_by_ver)
+            if parsed is None:
+                stats["skipped_unparsed_name"] += 1
                 continue
-            ver = int(m.group("ver"))
+            _pnum, ver, ph = parsed
             if ver not in include_vers:
+                stats["skipped_version"] += 1
                 continue
-            ph = int(m.group("ph"))
             phrase = phrases.get((ver, ph))
             if not phrase:
+                stats["skipped_unmapped_phrase"] += 1
                 continue
-            yield TestVideo(participant=pdir.name, video_path=vp, ver=ver, ph=ph, phrase=phrase)
+            out.append(TestVideo(participant=pdir.name, video_path=vp, ver=ver, ph=ph, phrase=phrase))
+            stats["included_examples"] += 1
+    return out, stats
+
+
+def iter_silent_speech_videos(
+    input_root: Path,
+    phrases: dict[tuple[int, int], str],
+    include_vers: set[int],
+    dedup_trailing_one: bool = True,
+) -> Iterator[TestVideo]:
+    videos, _stats = collect_silent_speech_videos(
+        input_root=input_root,
+        phrases=phrases,
+        include_vers=include_vers,
+        dedup_trailing_one=dedup_trailing_one,
+    )
+    yield from videos
 
 
 def _writer_for(path: Path):
@@ -112,6 +201,7 @@ def convert_liptype_test_to_tfrecords(
     spec: ExampleSpec | None = None,
     landmarks_backend: LandmarksBackend | None = None,
     max_examples: int | None = None,
+    dedup_trailing_one: bool = True,
 ):
     """Convert LipType participant test dataset to TFRecords (writes to test-*.tfrecord only)."""
     import json
@@ -135,9 +225,13 @@ def convert_liptype_test_to_tfrecords(
     ]
     n_test = 0
     try:
-        for idx, tv in enumerate(
-            tqdm(iter_silent_speech_videos(input_root, phrases, include_vers), desc="liptype_test")
-        ):
+        videos, stats = collect_silent_speech_videos(
+            input_root=input_root,
+            phrases=phrases,
+            include_vers=include_vers,
+            dedup_trailing_one=dedup_trailing_one,
+        )
+        for idx, tv in enumerate(tqdm(videos, desc="liptype_test")):
             if max_examples is not None and idx >= max_examples:
                 break
             video = read_video_rgb(tv.video_path, max_frames=None)
@@ -169,6 +263,8 @@ def convert_liptype_test_to_tfrecords(
         "include_vers": sorted(list(include_vers)),
         "readme": str(readme_path),
         "input_root": str(input_root),
+        "mapping_stats": stats,
+        "dedup_trailing_one": bool(dedup_trailing_one),
     }
     output_root.mkdir(parents=True, exist_ok=True)
     (output_root / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
@@ -188,6 +284,7 @@ def convert_liptype_test_to_tfrecords_paper_style(
     progress_every: int = 200,
     detector_device: str = "cpu",
     cfg: PaperPreprocConfig = PaperPreprocConfig(),
+    dedup_trailing_one: bool = True,
 ):
     """Convert LipType_Test_Dataset videos with paper-style preprocessing (test split only)."""
     import json
@@ -204,7 +301,12 @@ def convert_liptype_test_to_tfrecords_paper_style(
     )
     detector = Ibug68WithDlibDetector(device=detector_device)
 
-    videos = list(iter_silent_speech_videos(input_root, phrases, include_vers))
+    videos, stats = collect_silent_speech_videos(
+        input_root=input_root,
+        phrases=phrases,
+        include_vers=include_vers,
+        dedup_trailing_one=dedup_trailing_one,
+    )
     total_videos = len(videos)
     if max_examples is not None:
         videos = videos[: int(max_examples)]
@@ -273,6 +375,8 @@ def convert_liptype_test_to_tfrecords_paper_style(
         "readme": str(readme_path),
         "input_root": str(input_root),
         "elapsed_sec": time.time() - t0,
+        "mapping_stats": stats,
+        "dedup_trailing_one": bool(dedup_trailing_one),
     }
     output_root.mkdir(parents=True, exist_ok=True)
     (output_root / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
@@ -294,6 +398,7 @@ def convert_liptype_test_to_tfrecords_paper_style_train_val(
     progress_every: int = 200,
     detector_device: str = "cpu",
     cfg: PaperPreprocConfig = PaperPreprocConfig(),
+    dedup_trailing_one: bool = True,
 ):
     """Convert LipType_Test_Dataset videos with paper-style preprocessing (train/val only)."""
     import json
@@ -313,7 +418,12 @@ def convert_liptype_test_to_tfrecords_paper_style_train_val(
     )
     detector = Ibug68WithDlibDetector(device=detector_device)
 
-    videos = list(iter_silent_speech_videos(input_root, phrases, include_vers))
+    videos, stats = collect_silent_speech_videos(
+        input_root=input_root,
+        phrases=phrases,
+        include_vers=include_vers,
+        dedup_trailing_one=dedup_trailing_one,
+    )
     total_videos = len(videos)
     if max_examples is not None:
         videos = videos[: int(max_examples)]
@@ -412,6 +522,8 @@ def convert_liptype_test_to_tfrecords_paper_style_train_val(
         "readme": str(readme_path),
         "input_root": str(input_root),
         "elapsed_sec": time.time() - t0,
+        "mapping_stats": stats,
+        "dedup_trailing_one": bool(dedup_trailing_one),
     }
     output_root.mkdir(parents=True, exist_ok=True)
     (output_root / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")

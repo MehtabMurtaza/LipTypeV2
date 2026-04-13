@@ -106,6 +106,11 @@ def liptype_test_to_tfrecords(
     max_frames: int = typer.Option(75, min=1),
     max_text_len: int = typer.Option(120, min=1),
     max_examples: int = typer.Option(0, min=0, help="If >0, stop after N examples."),
+    dedup_trailing_1: bool = typer.Option(
+        True,
+        "--dedup-trailing-1/--no-dedup-trailing-1",
+        help="Drop files ending with '1.mp4' when a same-name base file exists.",
+    ),
     progress_every: int = typer.Option(200, min=0, help="Print status every N videos (0 disables)."),
     detector_device: str = typer.Option("cpu", help="iBug predictor device, e.g. cpu or cuda:0."),
     crop_w: int = typer.Option(100, min=1, help="Mouth crop width."),
@@ -160,6 +165,7 @@ def liptype_test_to_tfrecords(
         max_frames=max_frames,
         max_text_len=max_text_len,
         max_examples=(max_examples if max_examples > 0 else None),
+        dedup_trailing_one=dedup_trailing_1,
         progress_every=progress_every,
         detector_device=detector_device,
         cfg=cfg,
@@ -193,6 +199,11 @@ def liptype_test_train_val_to_tfrecords(
     max_frames: int = typer.Option(75, min=1),
     max_text_len: int = typer.Option(120, min=1),
     max_examples: int = typer.Option(0, min=0, help="If >0, stop after N examples."),
+    dedup_trailing_1: bool = typer.Option(
+        True,
+        "--dedup-trailing-1/--no-dedup-trailing-1",
+        help="Drop files ending with '1.mp4' when a same-name base file exists.",
+    ),
     progress_every: int = typer.Option(200, min=0, help="Print status every N videos (0 disables)."),
     detector_device: str = typer.Option("cpu", help="iBug predictor device, e.g. cpu or cuda:0."),
     crop_w: int = typer.Option(100, min=1, help="Mouth crop width."),
@@ -205,7 +216,7 @@ def liptype_test_train_val_to_tfrecords(
         "28,33,36,39,42,45,48,54",
         help="Comma-separated 0-based stable landmark indices used for affine fitting.",
     ),
-    canonical_68_npy: Path = typer.Option(
+    canonical_68_npy: Optional[Path] = typer.Option(
         None,
         exists=True,
         dir_okay=False,
@@ -249,6 +260,7 @@ def liptype_test_train_val_to_tfrecords(
         max_frames=max_frames,
         max_text_len=max_text_len,
         max_examples=(max_examples if max_examples > 0 else None),
+        dedup_trailing_one=dedup_trailing_1,
         progress_every=progress_every,
         detector_device=detector_device,
         cfg=cfg,
