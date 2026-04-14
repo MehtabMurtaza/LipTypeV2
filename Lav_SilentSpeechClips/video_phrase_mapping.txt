@@ -1,0 +1,10 @@
+P-id-SSpeech-ver10-Ph0	my watch fell in the water 
+P-id-SSpeech-ver10-Ph1	prevailing wind from the east 
+P-id-SSpeech-ver10-Ph2	never too rich and never too thin 
+P-id-SSpeech-ver10-Ph3	breathing is difficult 
+P-id-SSpeech-ver10-Ph4	I can see the rings on Saturn 
+P-id-SSpeech-ver10-Ph5	Physics and chemistry are hard 
+P-id-SSpeech-ver10-Ph6	my bank account is overdrawn 
+P-id-SSpeech-ver10-Ph7	elections bring out the best 
+P-id-SSpeech-ver10-Ph8	you are a wonderful example 
+P-id-SSpeech-ver10-Ph9	do not squander your time 

@@ -193,7 +193,9 @@ def liptype_test_train_val_to_tfrecords(
     ),
     output_root: Path = typer.Option(..., file_okay=False, dir_okay=True),
     include_vers: str = typer.Option("10", help="Comma-separated silent-speech versions to include."),
-    val_ratio: float = typer.Option(0.2, min=0.001, max=0.999, help="Validation split ratio."),
+    val_ratio: float = typer.Option(
+        0.2, min=0.0, max=0.999, help="Validation split ratio. Use 0.0 to put all samples in train."
+    ),
     split_seed: int = typer.Option(42, help="Random seed for deterministic train/val split."),
     num_shards: int = typer.Option(64, min=1),
     max_frames: int = typer.Option(75, min=1),

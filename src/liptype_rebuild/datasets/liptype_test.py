@@ -135,9 +135,11 @@ def collect_silent_speech_videos(
     }
 
     for pdir in sorted([p for p in input_root.iterdir() if p.is_dir() and p.name.lower().startswith("p")]):
-        silent_dir = pdir / "data" / "silent speech"
-        if not silent_dir.exists():
-            continue
+        # Support both layouts:
+        # 1) P*/data/silent speech/*.mp4
+        # 2) P*/*.mp4 (videos directly under participant folder)
+        nested_silent_dir = pdir / "data" / "silent speech"
+        silent_dir = nested_silent_dir if nested_silent_dir.exists() else pdir
         all_mp4 = sorted([p for p in silent_dir.glob("*.mp4") if p.is_file()])
         name_set = {p.name for p in all_mp4}
 
@@ -404,8 +406,8 @@ def convert_liptype_test_to_tfrecords_paper_style_train_val(
     import json
     import time
 
-    if not (0.0 < float(val_ratio) < 1.0):
-        raise ValueError(f"val_ratio must be in (0,1), got {val_ratio}")
+    if not (0.0 <= float(val_ratio) < 1.0):
+        raise ValueError(f"val_ratio must be in [0,1), got {val_ratio}")
 
     phrases = parse_readme_phrases(readme_path)
     charset = Charset()
@@ -432,8 +434,11 @@ def convert_liptype_test_to_tfrecords_paper_style_train_val(
     rng.shuffle(videos)
 
     n_total = len(videos)
-    n_val_target = max(1, int(round(n_total * float(val_ratio)))) if n_total > 1 else 0
-    n_val_target = min(n_val_target, max(0, n_total - 1))
+    if float(val_ratio) <= 0.0:
+        n_val_target = 0
+    else:
+        n_val_target = max(1, int(round(n_total * float(val_ratio)))) if n_total > 1 else 0
+        n_val_target = min(n_val_target, max(0, n_total - 1))
     split_at = n_total - n_val_target
     train_videos = videos[:split_at]
     val_videos = videos[split_at:]
